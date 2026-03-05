@@ -3,7 +3,7 @@ import os
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib import error, request
@@ -135,6 +135,16 @@ def parse_optional_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def parse_hhmm_time(value: Any, default_hhmm: str) -> time:
+    raw = str(value or "").strip()
+    if raw:
+        try:
+            return datetime.strptime(raw, "%H:%M").time()
+        except Exception:
+            pass
+    return datetime.strptime(default_hhmm, "%H:%M").time()
+
+
 def informative_lines(pairs: List[Tuple[str, Any]]) -> List[str]:
     lines: List[str] = []
     for label, value in pairs:
@@ -253,6 +263,7 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
         "\n".join(
             [
                 "1. PRODUK",
+                f"- Jam kerja: {d.get('jam_kerja_mulai', '-')} - {d.get('jam_kerja_selesai', '-')}",
                 f"- Produk: {d.get('produk', '-') or '-'}",
                 f"- 1-1. Nama alat: {d.get('alat', '-') or '-'}",
                 f"- 1-2. Jumlah isi barang dalam pillow: {d.get('isi_pillow_kg', 0)} kg",
@@ -307,6 +318,7 @@ def render_steril_blocks(payload: Dict[str, Any]) -> List[str]:
     )
     detail_lines = informative_lines(
         [
+            ("Jam kerja", f"{d.get('jam_kerja_mulai', '-')} - {d.get('jam_kerja_selesai', '-')}"),
             ("Produk", d.get("produk", "")),
             ("Nama alat", d.get("alat", "")),
             ("Jumlah isi untuk steril", d.get("isi_steril", "")),
@@ -777,16 +789,31 @@ def main() -> None:
 
     loaded_details = st.session_state.get("loaded_details", {})
     with st.form("giling_form", clear_on_submit=False):
-        c1, c2 = st.columns(2)
-        with c1:
+        top1, top2, top3 = st.columns(3)
+        with top1:
             team_id = st.text_input("Tim laporan", value=team_scope, disabled=True)
+        with top2:
+            pelapor = st.text_input("Pelapor", value=st.session_state.get("pelapor", operator_scope))
+        with top3:
             default_shift = st.session_state.get("shift", "1")
             shift_options = ["1", "2", "3"]
             shift_index = shift_options.index(default_shift) if default_shift in shift_options else 0
             shift = st.selectbox("Shift", options=shift_options, index=shift_index)
-        with c2:
-            pelapor = st.text_input("Pelapor", value=st.session_state.get("pelapor", operator_scope))
-            work_date = st.date_input("Tanggal kerja", value=work_date_scope, disabled=True)
+
+        jam1, jam2 = st.columns(2)
+        with jam1:
+            jam_kerja_mulai_t = st.time_input(
+                "Jam kerja mulai",
+                value=parse_hhmm_time(loaded_details.get("jam_kerja_mulai", ""), "00:00"),
+            )
+        with jam2:
+            jam_kerja_selesai_t = st.time_input(
+                "Jam kerja selesai",
+                value=parse_hhmm_time(loaded_details.get("jam_kerja_selesai", ""), "23:30"),
+            )
+        jam_kerja_mulai = f"{jam_kerja_mulai_t.hour:02d}:{jam_kerja_mulai_t.minute:02d}"
+        jam_kerja_selesai = f"{jam_kerja_selesai_t.hour:02d}:{jam_kerja_selesai_t.minute:02d}"
+        work_date = work_date_scope
 
         report_type = st.radio(
             "Jenis Laporan Giling",
@@ -901,6 +928,8 @@ def main() -> None:
                 "isi_pillow_kg": isi_pillow_kg,
                 "petugas_steril": petugas_steril,
                 "timer_ada": timer_ada,
+                "jam_kerja_mulai": jam_kerja_mulai,
+                "jam_kerja_selesai": jam_kerja_selesai,
                 "status_defrost": status_defrost,
                 "total_beku": total_beku,
                 "total_beku_kg": total_beku_kg,
@@ -982,6 +1011,8 @@ def main() -> None:
                 "rencana_steril": rencana_steril,
                 "petugas_steril": petugas_steril,
                 "timer_ada": timer_ada,
+                "jam_kerja_mulai": jam_kerja_mulai,
+                "jam_kerja_selesai": jam_kerja_selesai,
                 "isi_steril": isi_steril,
                 "total_beku": total_beku,
                 "total_beku_kg": total_beku_kg,
