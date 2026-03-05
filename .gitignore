@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local env / secrets
+.env
+.streamlit/secrets.toml
+
+# Runtime app state
+.appdata/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
