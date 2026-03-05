@@ -873,6 +873,25 @@ def main() -> None:
                 st.session_state["pending_report_type"] = ""
                 st.rerun()
 
+    # Dynamic controls are placed outside form to allow immediate rerender.
+    if st.session_state.get("report_type_confirmed", "non_steril") == "non_steril":
+        st.markdown("### Pengaturan Status Defrost")
+        mode_defrost = st.radio(
+            "Cara isi status defrost",
+            options=["List baris", "Tulis manual"],
+            horizontal=True,
+            key="mode_defrost_non",
+        )
+        if mode_defrost == "List baris":
+            st.number_input(
+                "Jumlah baris defrost",
+                min_value=1,
+                max_value=12,
+                value=2,
+                step=1,
+                key="defrost_rows_non",
+            )
+
     loaded_details = st.session_state.get("loaded_details", {})
     with st.form("giling_form", clear_on_submit=False):
         top1, top2, top3 = st.columns(3)
@@ -933,15 +952,9 @@ def main() -> None:
                 placeholder="Nama petugas vakum / nama PIC",
             )
             st.markdown("### 2-1. Status defrost")
-            mode_defrost = st.radio(
-                "Cara isi status defrost",
-                options=["List baris", "Tulis manual"],
-                horizontal=True,
-                index=0,
-                key="mode_defrost_non",
-            )
+            mode_defrost = st.session_state.get("mode_defrost_non", "List baris")
             if mode_defrost == "List baris":
-                row_count = st.number_input("Jumlah baris defrost", min_value=1, max_value=12, value=2, step=1, key="defrost_rows_non")
+                row_count = int(st.session_state.get("defrost_rows_non", 2))
                 defrost_lines: List[str] = []
                 for idx in range(int(row_count)):
                     dc1, dc2, dc3 = st.columns([2, 4, 4])
