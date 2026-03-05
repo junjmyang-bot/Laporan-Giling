@@ -746,6 +746,8 @@ def main() -> None:
         st.session_state["pending_report_type"] = ""
     if "await_report_type_confirm" not in st.session_state:
         st.session_state["await_report_type_confirm"] = False
+    if "defrost_rows_non" not in st.session_state:
+        st.session_state["defrost_rows_non"] = 1
 
     st.subheader("Kontrol Tim")
     lc1, lc2, lc3, lc4 = st.columns(4)
@@ -883,14 +885,17 @@ def main() -> None:
             key="mode_defrost_non",
         )
         if mode_defrost == "List baris":
-            st.number_input(
-                "Jumlah baris defrost",
-                min_value=1,
-                max_value=12,
-                value=2,
-                step=1,
-                key="defrost_rows_non",
-            )
+            d1, d2, d3 = st.columns([2, 2, 6])
+            with d1:
+                if st.button("+ Tambah baris", key="btn_add_defrost", use_container_width=True):
+                    st.session_state["defrost_rows_non"] = min(20, int(st.session_state.get("defrost_rows_non", 1)) + 1)
+                    st.rerun()
+            with d2:
+                if st.button("- Hapus baris", key="btn_del_defrost", use_container_width=True):
+                    st.session_state["defrost_rows_non"] = max(1, int(st.session_state.get("defrost_rows_non", 1)) - 1)
+                    st.rerun()
+            with d3:
+                st.caption(f"Jumlah baris defrost: {int(st.session_state.get('defrost_rows_non', 1))}")
 
     loaded_details = st.session_state.get("loaded_details", {})
     with st.form("giling_form", clear_on_submit=False):
