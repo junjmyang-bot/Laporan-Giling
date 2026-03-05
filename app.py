@@ -276,10 +276,10 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
                 f"- Jam kerja: {d.get('jam_kerja_mulai', '-')} - {d.get('jam_kerja_selesai', '-')}",
                 f"- Produk: {d.get('produk', '-') or '-'}",
                 f"- 1-1. Nama alat: {d.get('alat', '-') or '-'}",
-                f"- 1-2. Jumlah isi barang dalam pillow: {d.get('isi_pillow_kg', 0)} kg",
+                f"- 1-2. Jumlah isi barang dalam pillow: {d.get('isi_pillow_kg', '-') or '-'}",
                 f"- 1-3. Nama petugas: {nama_petugas_txt}",
                 f"- 1-4. Timer ada?: {d.get('timer_ada', '-') or '-'}",
-                f"- Petugas vakum: {d.get('petugas_vacum', '-') or '-'}",
+                f"- Petugas vakum / PIC: {d.get('petugas_vacum', '-') or '-'}",
             ]
         ),
         "\n".join(
@@ -569,7 +569,7 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
     if not details.get("nama_petugas_list", []):
         errs.append("1-3 Nama petugas wajib diisi (bisa lebih dari satu nama).")
     if not details.get("petugas_vacum", "").strip():
-        errs.append("Untuk non-steril, petugas vakum wajib diisi.")
+        errs.append("Petugas vakum wajib diisi. Jika tidak vakum, isi nama PIC yang bertanggung jawab.")
     if details.get("timer_ada", "") not in {"O", "X"}:
         errs.append("Timer ada? wajib pilih O atau X.")
     if details["total_fresh_kg"] < 0 or details["total_buang_kg"] < 0:
@@ -922,16 +922,15 @@ def main() -> None:
         details: Dict[str, Any] = {}
         if report_type == "non_steril":
             st.markdown("### 1-2. Jumlah isi barang dalam pillow")
-            isi_pillow_kg = st.number_input(
+            isi_pillow_kg = st.text_input(
                 "Jumlah isi barang dalam pillow (kg)",
-                min_value=0.0,
-                step=0.5,
-                value=float(loaded_details.get("isi_pillow_kg", 0.0)),
+                value=str(loaded_details.get("isi_pillow_kg", "")),
+                placeholder="contoh: 1,635kg atau 1.635",
             )
             petugas_vacum = st.text_input(
-                "Petugas vakum (wajib)",
+                "Petugas vakum (wajib, jika tidak vakum isi nama PIC)",
                 value=loaded_details.get("petugas_vacum", ""),
-                placeholder="Nama petugas vakum",
+                placeholder="Nama petugas vakum / nama PIC",
             )
             st.markdown("### 2-1. Status defrost")
             mode_defrost = st.radio(
