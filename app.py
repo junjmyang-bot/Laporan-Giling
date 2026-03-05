@@ -145,6 +145,15 @@ def parse_hhmm_time(value: Any, default_hhmm: str) -> time:
     return datetime.strptime(default_hhmm, "%H:%M").time()
 
 
+def parse_name_lines(value: str) -> List[str]:
+    out: List[str] = []
+    for line in str(value or "").splitlines():
+        name = normalize_name(line)
+        if name:
+            out.append(name)
+    return out
+
+
 def informative_lines(pairs: List[Tuple[str, Any]]) -> List[str]:
     lines: List[str] = []
     for label, value in pairs:
@@ -258,7 +267,8 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
     status_defrost = str(d.get("status_defrost", "")).strip() or "-"
     status_giling = str(d.get("status_giling", "")).strip() or "-"
     status_vacum = str(d.get("status_vacum", "")).strip() or "-"
-    petugas = normalize_name(d.get("petugas_steril", ""))
+    nama_petugas = d.get("nama_petugas_list", [])
+    nama_petugas_txt = ", ".join([str(x) for x in nama_petugas if str(x).strip()]) or "-"
     return [
         "\n".join(
             [
@@ -267,8 +277,9 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
                 f"- Produk: {d.get('produk', '-') or '-'}",
                 f"- 1-1. Nama alat: {d.get('alat', '-') or '-'}",
                 f"- 1-2. Jumlah isi barang dalam pillow: {d.get('isi_pillow_kg', 0)} kg",
-                f"- 1-3. Petugas steril: {petugas or '-'}",
+                f"- 1-3. Nama petugas: {nama_petugas_txt}",
                 f"- 1-4. Timer ada?: {d.get('timer_ada', '-') or '-'}",
+                f"- Petugas vakum: {d.get('petugas_vacum', '-') or '-'}",
             ]
         ),
         "\n".join(
@@ -321,8 +332,11 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
 
 def render_steril_blocks(payload: Dict[str, Any]) -> List[str]:
     d = payload["details"]
+    nama_petugas = d.get("nama_petugas_list", [])
+    nama_petugas_txt = ", ".join([str(x) for x in nama_petugas if str(x).strip()]) or "-"
     petugas_lines = informative_lines(
         [
+            ("Nama petugas", nama_petugas_txt),
             ("Petugas steril", normalize_name(d.get("petugas_steril", ""))),
             ("Timer ada", d.get("timer_ada", "")),
             ("Target steril", d.get("rencana_steril", "")),
@@ -552,8 +566,10 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
         errs.append("Produk wajib diisi.")
     if not details.get("alat", "").strip():
         errs.append("Nama alat wajib diisi.")
-    if not details.get("petugas_steril", "").strip():
-        errs.append("Petugas steril wajib diisi.")
+    if not details.get("nama_petugas_list", []):
+        errs.append("1-3 Nama petugas wajib diisi (bisa lebih dari satu nama).")
+    if not details.get("petugas_vacum", "").strip():
+        errs.append("Untuk non-steril, petugas vakum wajib diisi.")
     if details.get("timer_ada", "") not in {"O", "X"}:
         errs.append("Timer ada? wajib pilih O atau X.")
     if details["total_fresh_kg"] < 0 or details["total_buang_kg"] < 0:
@@ -578,6 +594,10 @@ def validate_steril(details: Dict[str, Any]) -> List[str]:
         errs.append("Rencana jam steril wajib diisi.")
     if not details["produk"].strip():
         errs.append("Produk wajib diisi.")
+    if not details.get("nama_petugas_list", []):
+        errs.append("1-3 Nama petugas wajib diisi (bisa lebih dari satu nama).")
+    if not details.get("petugas_steril", "").strip():
+        errs.append("Untuk laporan steril, petugas steril wajib diisi.")
     if float(details.get("total_beku_kg", 0.0)) < 0:
         errs.append("Total barang beku (kg) tidak boleh negatif.")
     expected = float(details.get("total_beku_kg", 0.0)) + float(details.get("total_fresh_kg", 0.0)) - float(
@@ -886,10 +906,13 @@ def main() -> None:
         st.markdown("### 1. Produk" if report_type == "non_steril" else "### Data Umum")
         produk = st.text_input("1. Produk" if report_type == "non_steril" else "Produk", value=loaded_details.get("produk", ""))
         alat = st.text_input("1-1. Nama alat" if report_type == "non_steril" else "Nama alat", value=loaded_details.get("alat", ""))
-        petugas_steril = st.text_input(
-            "1-3. Petugas steril" if report_type == "non_steril" else "Petugas steril / vakum",
-            value=loaded_details.get("petugas_steril", ""),
+        nama_petugas_raw = st.text_area(
+            "1-3. Nama Petugas (satu baris satu nama)",
+            value=loaded_details.get("nama_petugas_raw", ""),
+            placeholder="Linda\nLian",
         )
+        st.caption("Tambah manual: 1 baris = 1 nama petugas.")
+        nama_petugas_list = parse_name_lines(nama_petugas_raw)
         timer_ada = st.selectbox(
             "1-4. Timer ada ?" if report_type == "non_steril" else "Timer ada?",
             options=["O", "X"],
@@ -905,12 +928,47 @@ def main() -> None:
                 step=0.5,
                 value=float(loaded_details.get("isi_pillow_kg", 0.0)),
             )
-            st.markdown("### 2-1. Status defrost")
-            status_defrost = st.text_area(
-                "Status defrost (Kalau sudah habis dipakai, tulis habis)",
-                value=loaded_details.get("status_defrost", ""),
-                placeholder="- 12:55 BB fresh = 75kg\n- 13:00 BB fresh = 75kg",
+            petugas_vacum = st.text_input(
+                "Petugas vakum (wajib)",
+                value=loaded_details.get("petugas_vacum", ""),
+                placeholder="Nama petugas vakum",
             )
+            st.markdown("### 2-1. Status defrost")
+            mode_defrost = st.radio(
+                "Cara isi status defrost",
+                options=["List baris", "Tulis manual"],
+                horizontal=True,
+                index=0,
+                key="mode_defrost_non",
+            )
+            if mode_defrost == "List baris":
+                row_count = st.number_input("Jumlah baris defrost", min_value=1, max_value=12, value=2, step=1, key="defrost_rows_non")
+                defrost_lines: List[str] = []
+                for idx in range(int(row_count)):
+                    dc1, dc2, dc3 = st.columns([2, 4, 4])
+                    jam = dc1.text_input(f"Jam #{idx+1}", placeholder="12:55", key=f"def_jam_non_{idx}")
+                    isi = dc2.text_input(f"Status #{idx+1}", placeholder="BB fresh = 75kg", key=f"def_isi_non_{idx}")
+                    cat = dc3.text_input(f"Catatan #{idx+1}", placeholder="sudah termasuk campuran", key=f"def_cat_non_{idx}")
+                    if jam.strip() or isi.strip():
+                        defrost_lines.append(f"- {jam.strip()} {isi.strip()}".strip())
+                    if cat.strip():
+                        defrost_lines.append(f"({cat.strip()})")
+                status_defrost = "\n".join(defrost_lines).strip()
+                st.caption("Preview status defrost")
+                st.code(status_defrost or "-")
+                extra_manual = st.text_area(
+                    "Tambahan manual (opsional)",
+                    value="",
+                    key="def_extra_non",
+                )
+                if extra_manual.strip():
+                    status_defrost = (status_defrost + "\n" + extra_manual.strip()).strip()
+            else:
+                status_defrost = st.text_area(
+                    "Status defrost (Kalau sudah habis dipakai, tulis habis)",
+                    value=loaded_details.get("status_defrost", ""),
+                    placeholder="- 12:55 BB fresh = 75kg\n(sudah termasuk campuran)\n- 13:00 BB fresh = 75kg",
+                )
             total_beku = st.text_input(
                 "Total barang beku diambil (contoh: sim km 20 pack)",
                 value=loaded_details.get("total_beku", ""),
@@ -1004,7 +1062,9 @@ def main() -> None:
                 "produk": produk,
                 "alat": alat,
                 "isi_pillow_kg": isi_pillow_kg,
-                "petugas_steril": petugas_steril,
+                "nama_petugas_raw": nama_petugas_raw,
+                "nama_petugas_list": nama_petugas_list,
+                "petugas_vacum": petugas_vacum,
                 "timer_ada": timer_ada,
                 "jam_kerja_mulai": jam_kerja_mulai,
                 "jam_kerja_selesai": jam_kerja_selesai,
@@ -1029,6 +1089,11 @@ def main() -> None:
             }
         else:
             st.markdown("### Form Steril-Required")
+            petugas_steril = st.text_input(
+                "Petugas steril (wajib)",
+                value=loaded_details.get("petugas_steril", ""),
+                placeholder="Nama petugas steril",
+            )
             rencana_steril = st.text_input("Rencana jam steril berapa lama", value=loaded_details.get("rencana_steril", ""))
             isi_steril = st.text_input("Jumlah isi barang untuk steril", value=loaded_details.get("isi_steril", ""))
             total_beku = st.text_input("Total barang beku diambil", value=loaded_details.get("total_beku", ""))
@@ -1100,6 +1165,8 @@ def main() -> None:
                 "produk": produk,
                 "alat": alat,
                 "rencana_steril": rencana_steril,
+                "nama_petugas_raw": nama_petugas_raw,
+                "nama_petugas_list": nama_petugas_list,
                 "petugas_steril": petugas_steril,
                 "timer_ada": timer_ada,
                 "jam_kerja_mulai": jam_kerja_mulai,
