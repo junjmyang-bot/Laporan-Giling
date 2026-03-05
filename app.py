@@ -244,6 +244,17 @@ def parse_hhmm_time(value: Any, default_hhmm: str) -> time:
     return datetime.strptime(default_hhmm, "%H:%M").time()
 
 
+def is_valid_hhmm(value: Any) -> bool:
+    raw = str(value or "").strip()
+    if not raw:
+        return False
+    try:
+        datetime.strptime(raw, "%H:%M")
+        return True
+    except Exception:
+        return False
+
+
 def parse_name_lines(value: str) -> List[str]:
     out: List[str] = []
     for line in str(value or "").splitlines():
@@ -536,10 +547,13 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
         kirim = str(row.get("kirim_pack", "")).strip() or "-"
         terima = str(row.get("terima_pack", "")).strip() or "-"
         selisih = str(row.get("selisih_pack", "")).strip() or "-"
-        tl = str(row.get("tl_packing", "")).strip() or "-"
-        pic = str(row.get("pic_packing", "")).strip() or "-"
+        tl_packing = str(row.get("tl_packing", "")).strip() or "-"
+        tl_kupas = str(row.get("tl_kupas", row.get("pic_packing", ""))).strip() or "-"
         alasan = str(row.get("alasan_selisih", "")).strip()
-        line = f"- [{idx}] {jam} | kirim {kirim} | terima {terima} | selisih {selisih} | TL {tl} | PIC {pic}"
+        line = (
+            f"- [{idx}] {jam} | kirim {kirim} | terima {terima} | selisih {selisih} | "
+            f"TL Kupas {tl_kupas} | TL Packing {tl_packing}"
+        )
         if alasan:
             line += f" | alasan: {alasan}"
         handover_lines.append(line)
@@ -601,7 +615,7 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
             [
                 "2-2. Tempat buang pillow sudah siap dekat meja/rak, dan sudah dikosongkan kalau sudah penuh?",
                 f"-> {d.get('tempat_buang_siap', '-') or '-'}",
-                f"-> Bukti foto 2-2: {d.get('tempat_buang_photo_name', '-') or '-'}",
+                f"-> Jam cek 2-2: {d.get('tempat_buang_check_time', '-') or '-'}",
             ]
         ),
         "\n".join(
@@ -623,7 +637,7 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
                 f"-> Total vakum diproses: {d.get('total_hasil_vakum', '-') or '-'} pack",
                 f"-> Total vakum bermasalah: {d.get('total_vacum_defect_pack', '-') or '-'} pack",
                 f"-> Total vakum normal (setelah masalah): {d.get('total_vacum_ok_pack', '-') or '-'} pack",
-                f"-> Jenis defect vacum/pillow: {d.get('jenis_defect_vacum', '-') or '-'}",
+                f"-> Barang ada masalah vacum/pillow: {d.get('jenis_defect_vacum', '-') or '-'}",
                 f"-> Antrian vacum terlalu lama?: {d.get('vacum_antrian_lama', '-') or '-'}",
                 f"-> Detail antrian vacum: {d.get('vacum_antrian_detail', '-') or '-'}",
                 f"-> Mesin vacum sudah cukup istirahat?: {d.get('mesin_vacum_istirahat', '-') or '-'}",
@@ -658,38 +672,58 @@ def render_steril_blocks(payload: Dict[str, Any]) -> List[str]:
     d = payload["details"]
     nama_petugas = d.get("nama_petugas_list", [])
     nama_petugas_txt = ", ".join([str(x) for x in nama_petugas if str(x).strip()]) or "-"
-    petugas_lines = informative_lines(
-        [
-            ("Nama petugas", nama_petugas_txt),
-            ("Petugas steril", normalize_name(d.get("petugas_steril", ""))),
-            ("Timer ada", d.get("timer_ada", "")),
-            ("Target steril", d.get("rencana_steril", "")),
-        ]
-    )
-    detail_lines = informative_lines(
-        [
-            ("Jam kerja", f"{d.get('jam_kerja_mulai', '-')} - {d.get('jam_kerja_selesai', '-')}"),
-            ("Produk", d.get("produk", "")),
-            ("Nama alat", d.get("alat", "")),
-            ("Jumlah isi untuk steril", d.get("isi_steril", "")),
-            ("Total barang beku diambil", d.get("total_beku", "")),
-            ("Total barang beku (kg)", d.get("total_beku_kg", "")),
-            ("Total BB fresh dipakai", f"{d.get('total_fresh_kg', '')} kg"),
-            ("Total BB dibuang", f"{d.get('total_buang_kg', '')} kg"),
-            ("Total akhir", f"{d.get('total_akhir_kg', '')} kg"),
-            ("Tempat buang pillow siap & dikosongkan saat penuh", d.get("tempat_buang_siap", "")),
-            ("Bukti foto 2-2 tempat buang pillow", d.get("tempat_buang_photo_name", "")),
-            ("Total giling", d.get("total_giling", "")),
-            ("Total produk steril", d.get("total_produk_steril", "")),
-            ("CB siap", d.get("cb_siap", "")),
-            ("CB dinyalakan", d.get("cb_nyala", "")),
-            ("Produk diambil <=20 menit", d.get("ambil_20_menit", "")),
-            ("Tidak ada sisa CB", d.get("tidak_ada_sisa_cb", "")),
-        ]
-    )
+    status_defrost = str(d.get("status_defrost", "")).strip() or "-"
+    status_giling = str(d.get("status_giling", "")).strip() or "-"
     return [
-        "\n".join(["PETUGAS"] + (petugas_lines or ["- Tidak ada data petugas"])),
-        "\n".join(["DETAIL KERJA"] + (detail_lines or ["- Tidak ada data detail"])),
+        "\n".join(
+            [
+                "1. PRODUK",
+                f"- Jam kerja: {d.get('jam_kerja_mulai', '-')} - {d.get('jam_kerja_selesai', '-')}",
+                f"- Produk: {d.get('produk', '-') or '-'}",
+                f"- 1-2. Jumlah isi untuk steril: {d.get('isi_steril', '-') or '-'}",
+                f"- 1-3. Nama petugas: {nama_petugas_txt}",
+                f"- 1-4. Timer ada?: {d.get('timer_ada', '-') or '-'}",
+                f"- Nama alat (khusus steril): {d.get('alat', '-') or '-'}",
+                f"- Petugas steril: {d.get('petugas_steril', '-') or '-'}",
+                f"- Target steril: {d.get('rencana_steril', '-') or '-'}",
+            ]
+        ),
+        "\n".join(
+            [
+                "2-1. STATUS DEFROST",
+                status_defrost,
+                f"-> Total pack defrost (otomatis): {d.get('defrost_total_pack_auto', '-') or '-'} pack",
+                f"-> Total barang beku diambil: {d.get('total_beku', '-') or '-'}",
+                f"-> Total bb fresh dipakai: {d.get('total_fresh_kg', 0)} kg",
+                f"-> Total bb dibuang: {d.get('total_buang_kg', 0)} kg",
+                f"-> Total: {d.get('total_akhir_kg', 0)} kg",
+            ]
+        ),
+        "\n".join(
+            [
+                "2-2. Tempat buang pillow sudah siap dekat meja/rak, dan sudah dikosongkan kalau sudah penuh?",
+                f"-> {d.get('tempat_buang_siap', '-') or '-'}",
+                f"-> Jam cek 2-2: {d.get('tempat_buang_check_time', '-') or '-'}",
+            ]
+        ),
+        "\n".join(
+            [
+                "3-1. STATUS GILING",
+                status_giling,
+                f"-> Total resep giling (otomatis): {d.get('giling_total_resep_auto', d.get('giling_total_pack_auto', '-')) or '-'} resep",
+                f"--> Total Giling: {d.get('total_giling', '-') or '-'} resep",
+            ]
+        ),
+        "\n".join(
+            [
+                "3-2. STATUS STERIL / CB",
+                f"-> Total produk steril: {d.get('total_produk_steril', '-') or '-'}",
+                f"-> CB siap: {d.get('cb_siap', '-') or '-'}",
+                f"-> CB dinyalakan: {d.get('cb_nyala', '-') or '-'}",
+                f"-> Produk diambil <=20 menit: {d.get('ambil_20_menit', '-') or '-'}",
+                f"-> Tidak ada sisa CB: {d.get('tidak_ada_sisa_cb', '-') or '-'}",
+            ]
+        ),
         "\n".join(["CATATAN", d.get("catatan", "-") or "-"]),
     ]
 
@@ -756,10 +790,7 @@ def send_telegram_edit_first(payload: Dict[str, Any]) -> Tuple[bool, List[int], 
             if isinstance(msg_id, int):
                 result_ids.append(msg_id)
 
-    photo_specs = [
-        ("tempat_buang_photo_path", "Bukti 2-2 tempat buang pillow"),
-        ("handover_photo_path", "Bukti handover packing"),
-    ]
+    photo_specs = [("handover_photo_path", "Bukti handover packing")]
     sent_photo_paths: set[str] = set()
     for photo_key, caption_label in photo_specs:
         photo_path = str(payload.get("details", {}).get(photo_key, "")).strip()
@@ -943,8 +974,8 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
             kirim = parse_optional_float(row.get("kirim_pack"))
             terima = parse_optional_float(row.get("terima_pack"))
             jam = str(row.get("jam", "")).strip()
-            tl = str(row.get("tl_packing", "")).strip()
-            pic = str(row.get("pic_packing", "")).strip()
+            tl_packing = str(row.get("tl_packing", "")).strip()
+            tl_kupas = str(row.get("tl_kupas", row.get("pic_packing", ""))).strip()
             alasan = str(row.get("alasan_selisih", "")).strip()
             if not jam:
                 errs.append(f"Baris handover #{idx}: jam wajib diisi.")
@@ -952,10 +983,10 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
                 errs.append(f"Baris handover #{idx}: total dikirim wajib angka.")
             if terima is None:
                 errs.append(f"Baris handover #{idx}: total diterima wajib angka.")
-            if not tl:
+            if not tl_packing:
                 errs.append(f"Baris handover #{idx}: nama TL packing wajib diisi.")
-            if not pic:
-                errs.append(f"Baris handover #{idx}: nama PIC packing wajib diisi.")
+            if not tl_kupas:
+                errs.append(f"Baris handover #{idx}: nama TL kupas wajib diisi.")
             if kirim is not None and terima is not None:
                 if kirim < 0 or terima < 0:
                     errs.append(f"Baris handover #{idx}: nilai tidak boleh negatif.")
@@ -964,9 +995,8 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
                     errs.append(f"Baris handover #{idx}: ada selisih, alasan wajib diisi.")
     if details.get("tempat_buang_siap", "") not in {"O", "X"}:
         errs.append("2-2 wajib dipilih O atau X pada setiap laporan.")
-    tempat_buang_photo_path = str(details.get("tempat_buang_photo_path", "")).strip()
-    if not tempat_buang_photo_path or not Path(tempat_buang_photo_path).exists():
-        errs.append("2-2 wajib upload foto bukti tempat buang pillow pada setiap laporan.")
+    if not is_valid_hhmm(details.get("tempat_buang_check_time", "")):
+        errs.append("2-2 jam cek wajib diisi format HH:MM.")
     giling_delay_rows = details.get("giling_delay_rows", [])
     active_delay_rows: List[Dict[str, Any]] = []
     if isinstance(giling_delay_rows, list):
@@ -1009,12 +1039,12 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
             has_defect_row = True
             jumlah_val = parse_optional_float(jumlah_raw)
             if not jenis:
-                errs.append(f"Jenis masalah vacum #{idx} wajib diisi.")
+                errs.append(f"Barang ada masalah vacum #{idx} wajib diisi.")
             if jumlah_val is None:
-                errs.append(f"Jumlah pack masalah vacum #{idx} wajib angka.")
+                errs.append(f"Jumlah pack barang bermasalah vacum #{idx} wajib angka.")
                 continue
             if jumlah_val < 0:
-                errs.append(f"Jumlah pack masalah vacum #{idx} tidak boleh negatif.")
+                errs.append(f"Jumlah pack barang bermasalah vacum #{idx} tidak boleh negatif.")
                 continue
             defect_sum_from_rows += jumlah_val
 
@@ -1024,9 +1054,9 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
         if total_vacum_defect > total_vacum:
             errs.append("Total vacum bermasalah tidak boleh lebih besar dari total vacum diproses.")
         if has_defect_row and abs(defect_sum_from_rows - total_vacum_defect) > 0.001:
-            errs.append("Jumlah pack dari jenis masalah vacum harus sama dengan total vacum bermasalah.")
+            errs.append("Jumlah pack dari barang ada masalah vacum harus sama dengan total vacum bermasalah.")
         if total_vacum_defect > 0 and not has_defect_row:
-            errs.append("Jika ada vacum bermasalah, jenis masalah vacum wajib diisi.")
+            errs.append("Jika ada vacum bermasalah, barang ada masalah vacum wajib diisi.")
 
     vacum_ops_rows = details.get("vacum_ops_rows", [])
     active_ops_rows: List[Dict[str, Any]] = []
@@ -1071,26 +1101,46 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
 
 def validate_steril(details: Dict[str, Any]) -> List[str]:
     errs: List[str] = []
-    if not details["rencana_steril"].strip():
+    if not str(details.get("rencana_steril", "")).strip():
         errs.append("Rencana jam steril wajib diisi.")
-    if not details["produk"].strip():
+    if not str(details.get("produk", "")).strip():
         errs.append("Produk wajib diisi.")
     if not details.get("nama_petugas_list", []):
         errs.append("1-3 Nama petugas wajib diisi (bisa lebih dari satu nama).")
     if not details.get("petugas_steril", "").strip():
         errs.append("Untuk laporan steril, petugas steril wajib diisi.")
-    if float(details.get("total_beku_kg", 0.0)) < 0:
-        errs.append("Total barang beku (kg) tidak boleh negatif.")
-    expected = float(details.get("total_beku_kg", 0.0)) + float(details.get("total_fresh_kg", 0.0)) - float(
-        details.get("total_buang_kg", 0.0)
-    )
-    if abs(expected - float(details.get("total_akhir_kg", 0.0))) > 0.001:
+    if details.get("timer_ada", "") not in {"O", "X"}:
+        errs.append("Timer ada? wajib pilih O atau X.")
+
+    total_beku_kg = parse_optional_float(details.get("total_beku_kg"))
+    total_fresh_kg = parse_optional_float(details.get("total_fresh_kg"))
+    total_buang_kg = parse_optional_float(details.get("total_buang_kg"))
+    total_akhir_kg = parse_optional_float(details.get("total_akhir_kg"))
+    if total_beku_kg is None:
+        errs.append("Total barang beku (kg) wajib diisi angka.")
+    if total_fresh_kg is None:
+        errs.append("Total bb fresh dipakai (kg) wajib diisi angka.")
+    if total_buang_kg is None:
+        errs.append("Total bb dibuang (kg) wajib diisi angka.")
+    if total_akhir_kg is None:
+        errs.append("Total akhir (kg) wajib diisi angka.")
+    if None not in (total_beku_kg, total_fresh_kg, total_buang_kg, total_akhir_kg):
+        if total_beku_kg < 0 or total_fresh_kg < 0 or total_buang_kg < 0 or total_akhir_kg < 0:
+            errs.append("Nilai kilogram tidak boleh negatif.")
+        expected = total_beku_kg + total_fresh_kg - total_buang_kg
+        if abs(expected - total_akhir_kg) > 0.001:
+            errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
+    else:
         errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
+
     if details.get("tempat_buang_siap", "") not in {"O", "X"}:
         errs.append("2-2 wajib dipilih O atau X pada setiap laporan.")
-    tempat_buang_photo_path = str(details.get("tempat_buang_photo_path", "")).strip()
-    if not tempat_buang_photo_path or not Path(tempat_buang_photo_path).exists():
-        errs.append("2-2 wajib upload foto bukti tempat buang pillow pada setiap laporan.")
+    if not is_valid_hhmm(details.get("tempat_buang_check_time", "")):
+        errs.append("2-2 jam cek wajib diisi format HH:MM.")
+    if not str(details.get("status_defrost", "")).strip():
+        errs.append("2-1 Status defrost wajib diisi.")
+    if not str(details.get("status_giling", "")).strip():
+        errs.append("3-1 Status giling wajib diisi.")
     return errs
 
 
@@ -1274,8 +1324,12 @@ def main() -> None:
         st.session_state["await_report_type_confirm"] = False
     if "defrost_rows_non" not in st.session_state:
         st.session_state["defrost_rows_non"] = 1
+    if "defrost_rows_st" not in st.session_state:
+        st.session_state["defrost_rows_st"] = 1
     if "giling_rows_non" not in st.session_state:
         st.session_state["giling_rows_non"] = 1
+    if "giling_rows_st" not in st.session_state:
+        st.session_state["giling_rows_st"] = 1
     if "giling_delay_rows_non" not in st.session_state:
         st.session_state["giling_delay_rows_non"] = 1
     if "vacum_rows_non" not in st.session_state:
@@ -1703,58 +1757,13 @@ def main() -> None:
                 format_func=lambda x: "Pilih O/X" if x == "" else x,
                 key="tempat_buang_siap_non",
             )
-            tempat_scope_non = f"{team_id}::{work_date}"
-            tempat_photo_path_key_non = f"tempat_buang_photo_path_non::{tempat_scope_non}"
-            tempat_photo_name_key_non = f"tempat_buang_photo_name_non::{tempat_scope_non}"
-            tempat_photo_sig_key_non = f"tempat_buang_photo_sig_non::{tempat_scope_non}"
-            if tempat_photo_path_key_non not in st.session_state:
-                st.session_state[tempat_photo_path_key_non] = ""
-            if tempat_photo_name_key_non not in st.session_state:
-                st.session_state[tempat_photo_name_key_non] = ""
-            if tempat_photo_sig_key_non not in st.session_state:
-                st.session_state[tempat_photo_sig_key_non] = ""
-
-            st.markdown("#### Foto bukti 2-2 (wajib tiap laporan)")
-            photo_mode_non = st.radio(
-                "Cara ambil foto 2-2",
-                options=["Kamera langsung", "Upload file"],
-                horizontal=True,
-                key=f"tempat_photo_mode_non::{tempat_scope_non}",
+            default_tempat_check_non = parse_hhmm_time(loaded_details.get("tempat_buang_check_time", ""), hhmm_now())
+            tempat_buang_check_t = st.time_input(
+                "Jam cek 2-2 (wajib tiap laporan)",
+                value=default_tempat_check_non,
+                key="tempat_buang_check_time_non",
             )
-            photo_input_non = None
-            if photo_mode_non == "Kamera langsung":
-                photo_input_non = st.camera_input(
-                    "Ambil foto sekarang",
-                    key=f"tempat_buang_photo_camera_non::{tempat_scope_non}::{st.session_state.get('active_idempotency_key', '')}",
-                )
-            else:
-                photo_input_non = st.file_uploader(
-                    "Upload foto tempat buang pillow (jpg/png/webp)",
-                    type=["jpg", "jpeg", "png", "webp"],
-                    key=f"tempat_buang_photo_upload_non::{tempat_scope_non}::{st.session_state.get('active_idempotency_key', '')}",
-                )
-            save_uploaded_image_to_evidence(
-                photo_input_non,
-                team_id=team_id,
-                work_date=work_date,
-                prefix="tempat_buang_non",
-                sig_key=tempat_photo_sig_key_non,
-                path_key=tempat_photo_path_key_non,
-                name_key=tempat_photo_name_key_non,
-            )
-
-            saved_tempat_photo_path_non = str(st.session_state.get(tempat_photo_path_key_non, "")).strip()
-            saved_tempat_photo_name_non = str(st.session_state.get(tempat_photo_name_key_non, "")).strip()
-            if saved_tempat_photo_path_non and Path(saved_tempat_photo_path_non).exists():
-                st.caption(f"Foto tersimpan: {saved_tempat_photo_name_non or Path(saved_tempat_photo_path_non).name}")
-                st.image(saved_tempat_photo_path_non, caption="Preview foto bukti 2-2", use_container_width=True)
-                if st.button("Hapus foto 2-2", key=f"btn_del_tempat_photo_non::{tempat_scope_non}::{st.session_state.get('active_idempotency_key', '')}"):
-                    st.session_state[tempat_photo_path_key_non] = ""
-                    st.session_state[tempat_photo_name_key_non] = ""
-                    st.session_state[tempat_photo_sig_key_non] = ""
-                    st.rerun()
-            else:
-                st.caption("Belum ada foto 2-2. Upload wajib sebelum kirim laporan.")
+            tempat_buang_check_time = f"{tempat_buang_check_t.hour:02d}:{tempat_buang_check_t.minute:02d}"
             st.markdown("### 3-1. Status Giling")
             mode_giling = st.radio(
                 "Cara isi status giling",
@@ -2010,7 +2019,7 @@ def main() -> None:
                 placeholder="contoh: 88",
             )
 
-            st.markdown("#### Jenis masalah vacum/pillow")
+            st.markdown("#### Barang ada masalah vacum/pillow")
             loaded_vacum_defect_rows = loaded_details.get("vacum_defect_rows", [])
             defect_type_manual = "Lainnya (isi manual)"
             defect_type_options = ["", "Seal bocor", "Pack pecah", "Basi", "Vakum kurang rapat", defect_type_manual]
@@ -2084,7 +2093,7 @@ def main() -> None:
                     f"Jenis masalah #{idx+1}",
                     options=defect_type_options,
                     index=type_idx,
-                    format_func=lambda x: "Pilih jenis masalah" if x == "" else x,
+                    format_func=lambda x: "Pilih barang bermasalah" if x == "" else x,
                     key=f"vac_defect_type_non_{idx}",
                 )
                 jenis_manual = ""
@@ -2121,12 +2130,12 @@ def main() -> None:
             total_vacum_ok_pack = ""
             if total_vacum_num is not None:
                 total_vacum_ok_pack = format_float_compact(total_vacum_num - sum_vacum_defect)
-            st.caption("Ringkasan jenis masalah vacum")
+            st.caption("Ringkasan barang ada masalah vacum")
             st.code("\n".join([f"- {x}" for x in vacum_defect_lines]) if vacum_defect_lines else "- Belum ada masalah tercatat")
             st.text_input("Total vacum bermasalah (otomatis, pack)", value=total_vacum_defect_pack, disabled=True)
             st.text_input("Total vakum normal (otomatis, pack)", value=total_vacum_ok_pack, disabled=True)
             st.caption("Rumus: total normal = total diproses - total bermasalah")
-            render_section_checkpoint_ui(team_id, str(work_date), report_type, "vacum_defect", "jenis masalah vacum")
+            render_section_checkpoint_ui(team_id, str(work_date), report_type, "vacum_defect", "barang ada masalah vacum")
 
             st.markdown("#### Log operasional vacum (tiap laporan)")
             loaded_vacum_ops_rows = loaded_details.get("vacum_ops_rows", [])
@@ -2207,14 +2216,13 @@ def main() -> None:
             has_kirim_x = False
             pic_candidates: List[str] = []
             for idx in range(int(row_count_vac_ops)):
-                st.markdown(f"**Log operasional #{idx+1}**")
                 voc1, voc2, voc3, voc4 = st.columns([2, 2, 2, 2])
-                jam_ops = voc1.text_input(f"Jam #{idx+1}", placeholder="14:20", key=f"vac_ops_jam_non_{idx}")
+                jam_ops = voc1.text_input("Jam", placeholder="14:20", key=f"vac_ops_jam_non_{idx}")
                 ops_opts = ["", "O", "X"]
                 antrian_raw = str(st.session_state.get(f"vac_ops_antrian_non_{idx}", "") or "")
                 antrian_idx = ops_opts.index(antrian_raw) if antrian_raw in ops_opts else 0
                 antrian_status = voc2.selectbox(
-                    f"Antrian #{idx+1}",
+                    "Antrian",
                     options=ops_opts,
                     index=antrian_idx,
                     format_func=lambda x: "Pilih" if x == "" else x,
@@ -2223,7 +2231,7 @@ def main() -> None:
                 mesin_raw = str(st.session_state.get(f"vac_ops_mesin_non_{idx}", "") or "")
                 mesin_idx = ops_opts.index(mesin_raw) if mesin_raw in ops_opts else 0
                 mesin_status = voc3.selectbox(
-                    f"Mesin #{idx+1}",
+                    "Mesin",
                     options=ops_opts,
                     index=mesin_idx,
                     format_func=lambda x: "Pilih" if x == "" else x,
@@ -2232,7 +2240,7 @@ def main() -> None:
                 kirim_raw = str(st.session_state.get(f"vac_ops_kirim_non_{idx}", "") or "")
                 kirim_idx = ops_opts.index(kirim_raw) if kirim_raw in ops_opts else 0
                 kirim_status = voc4.selectbox(
-                    f"Kirim #{idx+1}",
+                    "Kirim",
                     options=ops_opts,
                     index=kirim_idx,
                     format_func=lambda x: "Pilih" if x == "" else x,
@@ -2240,17 +2248,17 @@ def main() -> None:
                 )
                 vod1, vod2, vod3 = st.columns([3, 3, 2])
                 antrian_detail = vod1.text_input(
-                    f"Detail antrian #{idx+1}",
+                    "Detail antrian",
                     placeholder="isi jika antrian = O",
                     key=f"vac_ops_antrian_det_non_{idx}",
                 )
                 mesin_detail = vod2.text_input(
-                    f"Detail mesin #{idx+1}",
+                    "Detail mesin",
                     placeholder="isi jika mesin = X",
                     key=f"vac_ops_mesin_det_non_{idx}",
                 )
                 pic_cek = vod3.text_input(
-                    f"PIC cek #{idx+1}",
+                    "PIC cek",
                     placeholder="isi jika kirim = X",
                     key=f"vac_ops_pic_non_{idx}",
                 )
@@ -2323,7 +2331,7 @@ def main() -> None:
                         st.session_state[f"handover_kirim_non_{idx}"] = str(row.get("kirim_pack", ""))
                         st.session_state[f"handover_terima_non_{idx}"] = str(row.get("terima_pack", ""))
                         st.session_state[f"handover_tl_non_{idx}"] = str(row.get("tl_packing", ""))
-                        st.session_state[f"handover_pic_non_{idx}"] = str(row.get("pic_packing", ""))
+                        st.session_state[f"handover_pic_non_{idx}"] = str(row.get("tl_kupas", row.get("pic_packing", "")))
                         st.session_state[f"handover_alasan_non_{idx}"] = str(row.get("alasan_selisih", ""))
 
             h1, h2, h3 = st.columns([2, 2, 6])
@@ -2357,13 +2365,13 @@ def main() -> None:
             sum_terima = 0.0
             for idx in range(int(row_count_handover)):
                 hc1, hc2, hc3, hc4, hc5, hc6 = st.columns([2, 2, 2, 2, 2, 3])
-                jam = hc1.text_input(f"Jam handover #{idx+1}", placeholder="14:20", key=f"handover_jam_non_{idx}")
-                kirim = hc2.text_input(f"Kirim #{idx+1}", placeholder="120", key=f"handover_kirim_non_{idx}")
-                terima = hc3.text_input(f"Terima #{idx+1}", placeholder="116", key=f"handover_terima_non_{idx}")
-                tl = hc4.text_input(f"TL packing #{idx+1}", placeholder="Ibu Rina", key=f"handover_tl_non_{idx}")
-                pic = hc5.text_input(f"PIC packing #{idx+1}", placeholder="Siti", key=f"handover_pic_non_{idx}")
+                jam = hc1.text_input("Jam handover", placeholder="14:20", key=f"handover_jam_non_{idx}")
+                kirim = hc2.text_input("Kirim", placeholder="120", key=f"handover_kirim_non_{idx}")
+                terima = hc3.text_input("Terima", placeholder="116", key=f"handover_terima_non_{idx}")
+                tl = hc4.text_input("TL Packing", placeholder="Ibu Rina", key=f"handover_tl_non_{idx}")
+                pic = hc5.text_input("TL Kupas", placeholder="TL kupas", key=f"handover_pic_non_{idx}")
                 alasan = hc6.text_input(
-                    f"Alasan selisih #{idx+1}",
+                    "Alasan selisih",
                     placeholder="isi jika ada selisih",
                     key=f"handover_alasan_non_{idx}",
                 )
@@ -2382,6 +2390,7 @@ def main() -> None:
                         "terima_pack": terima,
                         "selisih_pack": selisih_text,
                         "tl_packing": tl,
+                        "tl_kupas": pic,
                         "pic_packing": pic,
                         "alasan_selisih": alasan,
                     }
@@ -2475,8 +2484,7 @@ def main() -> None:
                 "total_akhir_kg": total_akhir_kg,
                 "kg_calc_history": st.session_state.get(calc_history_key, []),
                 "tempat_buang_siap": tempat_buang_siap,
-                "tempat_buang_photo_path": saved_tempat_photo_path_non,
-                "tempat_buang_photo_name": saved_tempat_photo_name_non,
+                "tempat_buang_check_time": tempat_buang_check_time,
                 "status_giling": status_giling,
                 "giling_total_resep_auto": giling_total_resep_auto,
                 "giling_total_pack_auto": giling_total_resep_auto,
@@ -2511,54 +2519,115 @@ def main() -> None:
                 "tl_confirm_phrase": tl_confirm_phrase,
             }
         else:
-            st.markdown("### Data Umum")
-            produk = st.text_input("Produk", value=loaded_details.get("produk", ""))
-            alat = st.text_input("Nama alat", value=loaded_details.get("alat", ""))
+            st.markdown("### 1. Produk")
+            produk = st.text_input("1. Produk", value=loaded_details.get("produk", ""))
+            isi_steril = st.text_input("1-2. Jumlah isi barang untuk steril", value=loaded_details.get("isi_steril", ""))
             nama_petugas_raw = st.text_area(
-                "Nama Petugas (satu baris satu nama)",
+                "1-3. Nama Petugas (satu baris satu nama)",
                 value=loaded_details.get("nama_petugas_raw", ""),
                 placeholder="Linda\nLian",
             )
             st.caption("Tambah manual: 1 baris = 1 nama petugas.")
             nama_petugas_list = parse_name_lines(nama_petugas_raw)
             timer_ada = st.selectbox(
-                "Timer ada?",
+                "1-4. Timer ada ?",
                 options=["O", "X"],
                 index=0 if loaded_details.get("timer_ada", "O") == "O" else 1,
             )
-            st.markdown("### Form Steril-Required")
+            st.markdown("#### Info Steril (khusus)")
+            alat = st.text_input("Nama alat (khusus steril)", value=loaded_details.get("alat", ""))
             petugas_steril = st.text_input(
                 "Petugas steril (wajib)",
                 value=loaded_details.get("petugas_steril", ""),
                 placeholder="Nama petugas steril",
             )
             rencana_steril = st.text_input("Rencana jam steril berapa lama", value=loaded_details.get("rencana_steril", ""))
-            isi_steril = st.text_input("Jumlah isi barang untuk steril", value=loaded_details.get("isi_steril", ""))
+
+            st.markdown("### 2-1. Status defrost")
+            mode_defrost_st = st.radio(
+                "Cara isi status defrost",
+                options=["List baris", "Tulis manual"],
+                horizontal=True,
+                key="mode_defrost_st",
+            )
+            defrost_total_pack_auto = str(loaded_details.get("defrost_total_pack_auto", ""))
+            if mode_defrost_st == "List baris":
+                d1, d2, d3 = st.columns([2, 2, 6])
+                with d1:
+                    if st.button("+ Tambah", key="btn_add_defrost_st"):
+                        st.session_state["defrost_rows_st"] = min(20, int(st.session_state.get("defrost_rows_st", 1)) + 1)
+                        st.rerun()
+                with d2:
+                    if st.button("- Hapus", key="btn_del_defrost_st"):
+                        st.session_state["defrost_rows_st"] = max(1, int(st.session_state.get("defrost_rows_st", 1)) - 1)
+                        st.rerun()
+                with d3:
+                    st.caption(f"Jumlah baris defrost: {int(st.session_state.get('defrost_rows_st', 1))}")
+                row_count = ensure_row_count_from_session(
+                    "defrost_rows_st",
+                    ["def_jam_st_", "def_isi_st_", "def_kg_st_", "def_cat_st_"],
+                    min_rows=1,
+                    max_rows=20,
+                )
+                defrost_lines: List[str] = []
+                defrost_pack_sum = 0.0
+                defrost_pack_invalid = 0
+                for idx in range(int(row_count)):
+                    dc1, dc2, dc3, dc4 = st.columns([2, 3, 2, 3])
+                    jam = dc1.text_input("Jam", placeholder="12:55", key=f"def_jam_st_{idx}")
+                    isi = dc2.text_input("Status", placeholder="BB fresh", key=f"def_isi_st_{idx}")
+                    pack = dc3.text_input("Pack", placeholder="75", key=f"def_kg_st_{idx}")
+                    cat = dc4.text_input("Catatan", placeholder="sudah termasuk campuran", key=f"def_cat_st_{idx}")
+                    pack_val = parse_optional_float(pack)
+                    if pack.strip():
+                        if pack_val is None:
+                            defrost_pack_invalid += 1
+                        elif pack_val >= 0:
+                            defrost_pack_sum += pack_val
+                    if jam.strip() or isi.strip() or pack.strip():
+                        status_part = isi.strip()
+                        if pack.strip():
+                            status_part = f"{status_part} = {pack.strip()}pack".strip()
+                        defrost_lines.append(f"- {jam.strip()} {status_part}".strip())
+                    if cat.strip():
+                        defrost_lines.append(f"({cat.strip()})")
+                status_defrost = "\n".join(defrost_lines).strip()
+                st.caption("Preview status defrost")
+                st.code(status_defrost or "-")
+                defrost_total_pack_auto = format_float_compact(defrost_pack_sum)
+                st.text_input("Total pack defrost (otomatis)", value=defrost_total_pack_auto, disabled=True)
+                if defrost_pack_invalid > 0:
+                    st.warning(f"Ada {defrost_pack_invalid} nilai pack yang bukan angka, tidak dihitung.")
+                extra_manual_st = st.text_area("Tambahan manual (opsional)", value="", key="def_extra_st")
+                if extra_manual_st.strip():
+                    status_defrost = (status_defrost + "\n" + extra_manual_st.strip()).strip()
+            else:
+                status_defrost = st.text_area(
+                    "Status defrost (Kalau sudah habis dipakai, tulis habis)",
+                    value=loaded_details.get("status_defrost", ""),
+                    placeholder="- 20:00 BB fresh = 90kg\n- 20:20 BB fresh = 40kg",
+                )
+            render_section_checkpoint_ui(team_id, str(work_date), report_type, "defrost", "2-1 Defrost")
+
             total_beku = st.text_input("Total barang beku diambil", value=loaded_details.get("total_beku", ""))
-            total_beku_kg = st.number_input(
-                "Total barang beku (kg, angka untuk validasi)",
-                min_value=0.0,
-                step=1.0,
-                value=float(loaded_details.get("total_beku_kg", 0.0)),
-            )
-            total_fresh_kg = st.number_input(
-                "Total bb fresh dipakai (kg)",
-                min_value=0.0,
-                step=1.0,
-                value=float(loaded_details.get("total_fresh_kg", 0.0)),
-            )
-            total_buang_kg = st.number_input(
-                "Total bb dibuang (kg)",
-                min_value=0.0,
-                step=1.0,
-                value=float(loaded_details.get("total_buang_kg", 0.0)),
-            )
-            total_akhir_kg = st.number_input(
-                "Total akhir (kg)",
-                min_value=0.0,
-                step=1.0,
-                value=float(loaded_details.get("total_akhir_kg", 0.0)),
-            )
+            total_beku_kg_key_st = f"total_beku_kg_st::{team_id}::{work_date}"
+            total_fresh_kg_key_st = f"total_fresh_kg_st::{team_id}::{work_date}"
+            total_buang_kg_key_st = f"total_buang_kg_st::{team_id}::{work_date}"
+            total_akhir_kg_key_st = f"total_akhir_kg_st::{team_id}::{work_date}"
+            for key_name, seed in [
+                (total_beku_kg_key_st, str(loaded_details.get("total_beku_kg", ""))),
+                (total_fresh_kg_key_st, str(loaded_details.get("total_fresh_kg", ""))),
+                (total_buang_kg_key_st, str(loaded_details.get("total_buang_kg", ""))),
+                (total_akhir_kg_key_st, str(loaded_details.get("total_akhir_kg", ""))),
+            ]:
+                if key_name not in st.session_state:
+                    st.session_state[key_name] = seed
+
+            total_beku_kg = st.text_input("Total barang beku (kg, angka untuk validasi)", key=total_beku_kg_key_st, placeholder="contoh: 75")
+            total_fresh_kg = st.text_input("Total bb fresh dipakai (kg)", key=total_fresh_kg_key_st, placeholder="contoh: 225")
+            total_buang_kg = st.text_input("Total bb dibuang (kg)", key=total_buang_kg_key_st, placeholder="contoh: 0")
+            total_akhir_kg = st.text_input("Total akhir (kg)", key=total_akhir_kg_key_st, placeholder="contoh: 225")
+
             with st.expander("Jika total berubah vs laporan sebelumnya", expanded=False):
                 total_change_reason = st.text_input(
                     "Alasan perubahan total",
@@ -2570,6 +2639,8 @@ def main() -> None:
                     value=loaded_details.get("tl_confirm_phrase", ""),
                     key="st_tl_confirm_phrase",
                 )
+
+            st.markdown("### 2-2. Tempat buang pillow")
             tempat_opts = ["", "O", "X"]
             default_tempat_st = str(loaded_details.get("tempat_buang_siap", "") or "")
             default_idx_st = tempat_opts.index(default_tempat_st) if default_tempat_st in tempat_opts else 0
@@ -2580,59 +2651,84 @@ def main() -> None:
                 format_func=lambda x: "Pilih O/X" if x == "" else x,
                 key="tempat_buang_siap_st",
             )
-            tempat_scope_st = f"{team_id}::{work_date}"
-            tempat_photo_path_key_st = f"tempat_buang_photo_path_st::{tempat_scope_st}"
-            tempat_photo_name_key_st = f"tempat_buang_photo_name_st::{tempat_scope_st}"
-            tempat_photo_sig_key_st = f"tempat_buang_photo_sig_st::{tempat_scope_st}"
-            if tempat_photo_path_key_st not in st.session_state:
-                st.session_state[tempat_photo_path_key_st] = ""
-            if tempat_photo_name_key_st not in st.session_state:
-                st.session_state[tempat_photo_name_key_st] = ""
-            if tempat_photo_sig_key_st not in st.session_state:
-                st.session_state[tempat_photo_sig_key_st] = ""
+            default_tempat_check_st = parse_hhmm_time(loaded_details.get("tempat_buang_check_time", ""), hhmm_now())
+            tempat_buang_check_t = st.time_input(
+                "Jam cek 2-2 (wajib tiap laporan)",
+                value=default_tempat_check_st,
+                key="tempat_buang_check_time_st",
+            )
+            tempat_buang_check_time = f"{tempat_buang_check_t.hour:02d}:{tempat_buang_check_t.minute:02d}"
 
-            st.markdown("#### Foto bukti 2-2 (wajib tiap laporan)")
-            photo_mode_st = st.radio(
-                "Cara ambil foto 2-2",
-                options=["Kamera langsung", "Upload file"],
+            st.markdown("### 3-1. Status Giling")
+            mode_giling_st = st.radio(
+                "Cara isi status giling",
+                options=["List baris", "Tulis manual"],
                 horizontal=True,
-                key=f"tempat_photo_mode_st::{tempat_scope_st}",
+                key="mode_giling_st",
             )
-            photo_input_st = None
-            if photo_mode_st == "Kamera langsung":
-                photo_input_st = st.camera_input(
-                    "Ambil foto sekarang",
-                    key=f"tempat_buang_photo_camera_st::{tempat_scope_st}::{st.session_state.get('active_idempotency_key', '')}",
+            giling_total_resep_auto = str(
+                loaded_details.get("giling_total_resep_auto", loaded_details.get("giling_total_pack_auto", ""))
+            )
+            if mode_giling_st == "List baris":
+                g1, g2, g3 = st.columns([2, 2, 6])
+                with g1:
+                    if st.button("+ Tambah", key="btn_add_giling_st"):
+                        st.session_state["giling_rows_st"] = min(20, int(st.session_state.get("giling_rows_st", 1)) + 1)
+                        st.rerun()
+                with g2:
+                    if st.button("- Hapus", key="btn_del_giling_st"):
+                        st.session_state["giling_rows_st"] = max(1, int(st.session_state.get("giling_rows_st", 1)) - 1)
+                        st.rerun()
+                with g3:
+                    st.caption(f"Jumlah baris giling: {int(st.session_state.get('giling_rows_st', 1))}")
+                row_count_giling_st = ensure_row_count_from_session(
+                    "giling_rows_st",
+                    ["gil_jam_st_", "gil_isi_st_", "gil_kg_st_", "gil_cat_st_"],
+                    min_rows=1,
+                    max_rows=20,
                 )
+                giling_lines_st: List[str] = []
+                giling_resep_sum = 0.0
+                giling_resep_invalid = 0
+                for idx in range(int(row_count_giling_st)):
+                    gc1, gc2, gc3, gc4 = st.columns([2, 3, 2, 3])
+                    jam = gc1.text_input("Jam giling", placeholder="20:30", key=f"gil_jam_st_{idx}")
+                    isi = gc2.text_input("Status giling", placeholder="mulai giling batch 1", key=f"gil_isi_st_{idx}")
+                    resep = gc3.text_input("Resep giling", placeholder="18", key=f"gil_kg_st_{idx}")
+                    cat = gc4.text_input("Catatan giling", placeholder="opsional", key=f"gil_cat_st_{idx}")
+                    resep_val = parse_optional_float(resep)
+                    if resep.strip():
+                        if resep_val is None:
+                            giling_resep_invalid += 1
+                        elif resep_val >= 0:
+                            giling_resep_sum += resep_val
+                    if jam.strip() or isi.strip() or resep.strip():
+                        status_part = isi.strip()
+                        if resep.strip():
+                            status_part = f"{status_part} = {resep.strip()} resep".strip()
+                        giling_lines_st.append(f"- {jam.strip()} {status_part}".strip())
+                    if cat.strip():
+                        giling_lines_st.append(f"({cat.strip()})")
+                status_giling = "\n".join(giling_lines_st).strip()
+                st.caption("Preview status giling")
+                st.code(status_giling or "-")
+                giling_total_resep_auto = format_float_compact(giling_resep_sum)
+                st.text_input("Total resep giling (otomatis)", value=giling_total_resep_auto, disabled=True)
+                if giling_resep_invalid > 0:
+                    st.warning(f"Ada {giling_resep_invalid} nilai resep giling yang bukan angka, tidak dihitung.")
+                extra_giling_st = st.text_area("Tambahan manual status giling (opsional)", value="", key="giling_extra_st")
+                if extra_giling_st.strip():
+                    status_giling = (status_giling + "\n" + extra_giling_st.strip()).strip()
             else:
-                photo_input_st = st.file_uploader(
-                    "Upload foto tempat buang pillow (jpg/png/webp)",
-                    type=["jpg", "jpeg", "png", "webp"],
-                    key=f"tempat_buang_photo_upload_st::{tempat_scope_st}::{st.session_state.get('active_idempotency_key', '')}",
+                status_giling = st.text_area(
+                    "Status giling",
+                    value=loaded_details.get("status_giling", ""),
+                    placeholder="- 20:30 mulai giling batch 1\n- 21:35 giling batch 3",
                 )
-            save_uploaded_image_to_evidence(
-                photo_input_st,
-                team_id=team_id,
-                work_date=work_date,
-                prefix="tempat_buang_st",
-                sig_key=tempat_photo_sig_key_st,
-                path_key=tempat_photo_path_key_st,
-                name_key=tempat_photo_name_key_st,
-            )
+            render_section_checkpoint_ui(team_id, str(work_date), report_type, "giling", "3-1 Giling")
+            total_giling = st.text_input("Total Giling (berapa resep)", value=str(loaded_details.get("total_giling", "")), placeholder="contoh: 15")
 
-            saved_tempat_photo_path_st = str(st.session_state.get(tempat_photo_path_key_st, "")).strip()
-            saved_tempat_photo_name_st = str(st.session_state.get(tempat_photo_name_key_st, "")).strip()
-            if saved_tempat_photo_path_st and Path(saved_tempat_photo_path_st).exists():
-                st.caption(f"Foto tersimpan: {saved_tempat_photo_name_st or Path(saved_tempat_photo_path_st).name}")
-                st.image(saved_tempat_photo_path_st, caption="Preview foto bukti 2-2", use_container_width=True)
-                if st.button("Hapus foto 2-2 (steril)", key=f"btn_del_tempat_photo_st::{tempat_scope_st}::{st.session_state.get('active_idempotency_key', '')}"):
-                    st.session_state[tempat_photo_path_key_st] = ""
-                    st.session_state[tempat_photo_name_key_st] = ""
-                    st.session_state[tempat_photo_sig_key_st] = ""
-                    st.rerun()
-            else:
-                st.caption("Belum ada foto 2-2. Upload wajib sebelum kirim laporan.")
-            total_giling = st.text_input("Total giling", value=loaded_details.get("total_giling", ""))
+            st.markdown("### 3-2. Status Steril / CB (khusus)")
             total_produk_steril = st.text_input("Total produk steril", value=loaded_details.get("total_produk_steril", ""))
             cb_siap = st.selectbox(
                 "CB sudah dibersihkan dan isi air?",
@@ -2667,14 +2763,18 @@ def main() -> None:
                 "jam_kerja_mulai": jam_kerja_mulai,
                 "jam_kerja_selesai": jam_kerja_selesai,
                 "isi_steril": isi_steril,
+                "status_defrost": status_defrost,
+                "defrost_total_pack_auto": defrost_total_pack_auto,
                 "total_beku": total_beku,
                 "total_beku_kg": total_beku_kg,
                 "total_fresh_kg": total_fresh_kg,
                 "total_buang_kg": total_buang_kg,
                 "total_akhir_kg": total_akhir_kg,
                 "tempat_buang_siap": tempat_buang_siap,
-                "tempat_buang_photo_path": saved_tempat_photo_path_st,
-                "tempat_buang_photo_name": saved_tempat_photo_name_st,
+                "tempat_buang_check_time": tempat_buang_check_time,
+                "status_giling": status_giling,
+                "giling_total_resep_auto": giling_total_resep_auto,
+                "giling_total_pack_auto": giling_total_resep_auto,
                 "total_giling": total_giling,
                 "total_produk_steril": total_produk_steril,
                 "cb_siap": cb_siap,
@@ -2785,21 +2885,6 @@ def main() -> None:
             for k in ["tempat_buang_siap_non", "tempat_buang_siap_st"]:
                 if k in st.session_state:
                     st.session_state[k] = ""
-            scope_suffix = f"{team_id.strip()}::{work_date}"
-            for prefix in [
-                "tempat_buang_photo_path_non",
-                "tempat_buang_photo_name_non",
-                "tempat_buang_photo_sig_non",
-                "tempat_buang_photo_path_st",
-                "tempat_buang_photo_name_st",
-                "tempat_buang_photo_sig_st",
-            ]:
-                scoped_key = f"{prefix}::{scope_suffix}"
-                if scoped_key in st.session_state:
-                    st.session_state[scoped_key] = ""
-            if isinstance(details, dict):
-                details["tempat_buang_photo_path"] = ""
-                details["tempat_buang_photo_name"] = ""
             save_work_state(
                 team_id.strip() or "unknown",
                 str(work_date),
