@@ -759,6 +759,8 @@ def main() -> None:
         st.session_state["await_report_type_confirm"] = False
     if "defrost_rows_non" not in st.session_state:
         st.session_state["defrost_rows_non"] = 1
+    if "giling_rows_non" not in st.session_state:
+        st.session_state["giling_rows_non"] = 1
 
     st.subheader("Kontrol Tim")
     lc1, lc2, lc3, lc4 = st.columns(4)
@@ -908,6 +910,26 @@ def main() -> None:
             with d3:
                 st.caption(f"Jumlah baris defrost: {int(st.session_state.get('defrost_rows_non', 1))}")
 
+        st.markdown("### Pengaturan Status Giling")
+        mode_giling = st.radio(
+            "Cara isi status giling",
+            options=["List baris", "Tulis manual"],
+            horizontal=True,
+            key="mode_giling_non",
+        )
+        if mode_giling == "List baris":
+            g1, g2, g3 = st.columns([2, 2, 6])
+            with g1:
+                if st.button("+ Tambah baris giling", key="btn_add_giling", use_container_width=True):
+                    st.session_state["giling_rows_non"] = min(20, int(st.session_state.get("giling_rows_non", 1)) + 1)
+                    st.rerun()
+            with g2:
+                if st.button("- Hapus baris giling", key="btn_del_giling", use_container_width=True):
+                    st.session_state["giling_rows_non"] = max(1, int(st.session_state.get("giling_rows_non", 1)) - 1)
+                    st.rerun()
+            with g3:
+                st.caption(f"Jumlah baris giling: {int(st.session_state.get('giling_rows_non', 1))}")
+
     loaded_details = st.session_state.get("loaded_details", {})
     with st.form("giling_form", clear_on_submit=False):
         top1, top2, top3 = st.columns(3)
@@ -1043,16 +1065,43 @@ def main() -> None:
                 index=0 if loaded_details.get("tempat_buang_siap", "O") == "O" else 1,
             )
             st.markdown("### 3-1. Status Giling")
-            status_giling = st.text_area(
-                "Status giling",
-                value=loaded_details.get("status_giling", ""),
-                placeholder="- 11:30 mulai giling batch 0\n- 11:50 selesai giling batch 0",
-            )
-            total_giling = st.number_input(
-                "Total Giling (resep)",
-                min_value=0,
-                step=1,
-                value=parse_optional_int(loaded_details.get("total_giling", 0), 0),
+            mode_giling = st.session_state.get("mode_giling_non", "List baris")
+            if mode_giling == "List baris":
+                row_count_giling = int(st.session_state.get("giling_rows_non", 1))
+                giling_lines: List[str] = []
+                for idx in range(int(row_count_giling)):
+                    gc1, gc2, gc3, gc4 = st.columns([2, 3, 2, 3])
+                    jam = gc1.text_input(f"Jam giling #{idx+1}", placeholder="11:30", key=f"gil_jam_non_{idx}")
+                    isi = gc2.text_input(f"Status giling #{idx+1}", placeholder="mulai giling batch 0", key=f"gil_isi_non_{idx}")
+                    kg = gc3.text_input(f"Kg giling #{idx+1}", placeholder="75", key=f"gil_kg_non_{idx}")
+                    cat = gc4.text_input(f"Catatan giling #{idx+1}", placeholder="opsional", key=f"gil_cat_non_{idx}")
+                    if jam.strip() or isi.strip() or kg.strip():
+                        status_part = isi.strip()
+                        if kg.strip():
+                            status_part = f"{status_part} = {kg.strip()}kg".strip()
+                        giling_lines.append(f"- {jam.strip()} {status_part}".strip())
+                    if cat.strip():
+                        giling_lines.append(f"({cat.strip()})")
+                status_giling = "\n".join(giling_lines).strip()
+                st.caption("Preview status giling")
+                st.code(status_giling or "-")
+                extra_giling = st.text_area(
+                    "Tambahan manual status giling (opsional)",
+                    value="",
+                    key="giling_extra_non",
+                )
+                if extra_giling.strip():
+                    status_giling = (status_giling + "\n" + extra_giling.strip()).strip()
+            else:
+                status_giling = st.text_area(
+                    "Status giling",
+                    value=loaded_details.get("status_giling", ""),
+                    placeholder="- 11:30 mulai giling batch 0\n- 11:50 selesai giling batch 0",
+                )
+            total_giling = st.text_input(
+                "Total Giling (berapa resep)",
+                value=str(loaded_details.get("total_giling", "")),
+                placeholder="contoh: 15",
             )
             st.markdown("### 3-2. Status vacum")
             status_vacum = st.text_area(
