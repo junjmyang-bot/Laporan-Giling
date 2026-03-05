@@ -6,6 +6,8 @@ Single-entry `Laporan Giling` app with dynamic form branching:
 
 ## Features
 - Mobile-first single form flow.
+- Kupas top structure: `Tim laporan + Tanggal kerja + Pelapor + PIN Tim`.
+- Team lock flow: `Buka Tim` / `Ambil Alih Tim` before form entry.
 - System timestamp (read-only behavior at submit time).
 - Telegram-first delivery with edit-first fallback to send new message.
 - Auto root-message tracking by `(team_id + work_date + report_type)` for future edits.
@@ -33,6 +35,7 @@ Or use helper script:
 ## Environment Variables
 Copy `.env.example` and set:
 - `APP_TIMEZONE` default `Asia/Jakarta`
+- `TEAM_PASSWORDS` JSON map for team PINs
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 - `SHEETS_WEBHOOK_URL`

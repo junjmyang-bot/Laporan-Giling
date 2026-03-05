@@ -1,5 +1,6 @@
 import json
 import os
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -39,6 +40,37 @@ SHEETS_WEBHOOK_URL = read_setting("SHEETS_WEBHOOK_URL", "").strip()
 SHEETS_WEBHOOK_SECRET = read_setting("SHEETS_WEBHOOK_SECRET", "").strip()
 SHEETS_REQUIRED = read_setting("SHEETS_REQUIRED", "true").lower() == "true"
 TELEGRAM_SAFE_LIMIT = int(read_setting("TELEGRAM_SAFE_LIMIT", "3500"))
+TEAM_PASSWORDS_ERROR: Optional[str] = None
+
+
+def load_team_passwords() -> Dict[str, str]:
+    global TEAM_PASSWORDS_ERROR
+    defaults = {
+        "KUPAS-1": "abcd",
+        "KUPAS-2": "1234",
+        "KUPAS-3": "ab12",
+    }
+    raw = read_setting("TEAM_PASSWORDS", "").strip()
+    if not raw:
+        TEAM_PASSWORDS_ERROR = "TEAM_PASSWORDS belum diatur. Sementara pakai PIN default."
+        return defaults
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict) and parsed:
+            TEAM_PASSWORDS_ERROR = None
+            return {str(k): str(v) for k, v in parsed.items()}
+    except Exception:
+        pass
+    TEAM_PASSWORDS_ERROR = "TEAM_PASSWORDS tidak valid. Sementara pakai PIN default."
+    return defaults
+
+
+TEAM_PASSWORDS = load_team_passwords()
+TEAM_LABELS = {
+    "KUPAS-1": "Kupas team Erika",
+    "KUPAS-2": "Kupas team Elok",
+    "KUPAS-3": "Kupas Extra",
+}
 
 
 def ensure_storage() -> None:
@@ -562,12 +594,12 @@ def takeover_team_lock(team_id: str, work_date: str, owner: str) -> Tuple[bool, 
 def validate_lock_for_submit(team_id: str, work_date: str, owner: str, token: str, version: int) -> Tuple[bool, str]:
     cur = read_lock(team_id, work_date)
     if not cur:
-        return False, "Lock belum dibuka. Tekan Open Team dulu."
+        return False, "Tim belum dibuka. Tekan Buka Tim dulu."
     if cur.get("owner") == owner:
         return True, ""
     if cur.get("token") == token and int(cur.get("version", -1)) == int(version):
         return True, ""
-    return False, "Lock conflict terdeteksi. Gunakan Take Over lalu kirim ulang."
+    return False, "Konflik kunci terdeteksi. Gunakan Ambil Alih Tim lalu kirim ulang."
 
 
 def latest_success_minutes_ago(team_id: str, work_date: str) -> Optional[int]:
@@ -608,9 +640,11 @@ def set_root_message_ids(team_id: str, work_date: str, report_type: str, message
 
 def main() -> None:
     ensure_storage()
-    st.set_page_config(page_title="Laporan Giling", layout="centered")
-    st.title("Laporan Giling")
-    st.caption("Mobile-first | Telegram utama | Google Sheets backup wajib")
+    st.set_page_config(page_title="Laporan Giling Kupas", layout="centered")
+    if TEAM_PASSWORDS_ERROR:
+        st.warning(TEAM_PASSWORDS_ERROR)
+    st.title("B-1-3 Laporan Giling (Kupas)")
+    st.caption("Durasi lapor: 1 kali / 30 menit | Telegram utama | Google Sheets backup wajib")
 
     if "lock_token" not in st.session_state:
         st.session_state["lock_token"] = ""
@@ -620,46 +654,88 @@ def main() -> None:
         st.session_state["lock_owner"] = ""
     if "active_idempotency_key" not in st.session_state:
         st.session_state["active_idempotency_key"] = str(uuid.uuid4())
+    if "authenticated_scope" not in st.session_state:
+        st.session_state["authenticated_scope"] = ""
 
-    st.subheader("Team Control")
-    lc1, lc2, lc3 = st.columns(3)
+    st.subheader("Kontrol Tim")
+    lc1, lc2, lc3, lc4 = st.columns(4)
     with lc1:
-        team_scope = st.text_input("Team scope", value=st.session_state.get("team_scope", ""))
+        team_choices = list(TEAM_PASSWORDS.keys())
+        default_team = st.session_state.get("team_scope", team_choices[0] if team_choices else "")
+        team_index = team_choices.index(default_team) if default_team in team_choices else 0
+        team_scope = st.selectbox(
+            "Tim laporan",
+            options=team_choices,
+            index=team_index,
+            format_func=lambda x: TEAM_LABELS.get(x, x),
+        )
     with lc2:
-        work_date_scope = st.date_input("Work date scope", value=now_local().date(), key="work_date_scope")
+        work_date_scope = st.date_input("Tanggal kerja", value=now_local().date(), key="work_date_scope")
     with lc3:
-        operator_scope = st.text_input("Operator (lock owner)", value=st.session_state.get("owner_scope", ""))
+        operator_scope = st.text_input("Pelapor", value=st.session_state.get("owner_scope", ""), placeholder="Nama pelapor")
+    with lc4:
+        team_pin = st.text_input("PIN Tim", type="password")
+
+    st.session_state["team_scope"] = team_scope
+    st.session_state["owner_scope"] = operator_scope
+
+    scope = f"{work_date_scope}::{team_scope}"
+    lock_now = read_lock(team_scope, str(work_date_scope))
+    if lock_now:
+        st.caption(f"Kunci aktif: {lock_now.get('owner', '-')} ({lock_now.get('updated_at', '-')})")
+    else:
+        st.caption("Belum ada kunci aktif untuk tim ini.")
+    st.caption("Buka Tim: mulai laporan tim ini hari ini (PIN + kunci).")
+    st.caption("Ambil Alih Tim: ambil alih saat tim terkunci operator lain.")
+
     b1, b2, b3 = st.columns(3)
     with b1:
-        if st.button("Open Team"):
-            ok, msg, lock = open_team_lock(team_scope, str(work_date_scope), operator_scope.strip())
-            if ok:
-                st.session_state["lock_token"] = lock.get("token", "")
-                st.session_state["lock_version"] = int(lock.get("version", 0))
-                st.session_state["lock_owner"] = operator_scope.strip()
-                st.success(msg)
+        if st.button("Buka Tim"):
+            if not operator_scope.strip():
+                st.error("Nama pelapor wajib diisi.")
+            elif secrets.compare_digest(team_pin, TEAM_PASSWORDS.get(team_scope, "")):
+                ok, msg, lock = open_team_lock(team_scope, str(work_date_scope), operator_scope.strip())
+                if ok:
+                    st.session_state["lock_token"] = lock.get("token", "")
+                    st.session_state["lock_version"] = int(lock.get("version", 0))
+                    st.session_state["lock_owner"] = operator_scope.strip()
+                    st.session_state["authenticated_scope"] = scope
+                    st.success(f"{team_scope} berhasil dibuka.")
+                else:
+                    st.error(msg)
             else:
-                st.error(msg)
+                st.error("PIN Tim tidak valid.")
     with b2:
-        if st.button("Take Over Team"):
-            ok, msg, lock = takeover_team_lock(team_scope, str(work_date_scope), operator_scope.strip())
-            if ok:
-                st.session_state["lock_token"] = lock.get("token", "")
-                st.session_state["lock_version"] = int(lock.get("version", 0))
-                st.session_state["lock_owner"] = operator_scope.strip()
-                st.warning(msg)
+        if st.button("Ambil Alih Tim"):
+            if not operator_scope.strip():
+                st.error("Nama pelapor wajib diisi.")
+            elif secrets.compare_digest(team_pin, TEAM_PASSWORDS.get(team_scope, "")):
+                ok, msg, lock = takeover_team_lock(team_scope, str(work_date_scope), operator_scope.strip())
+                if ok:
+                    st.session_state["lock_token"] = lock.get("token", "")
+                    st.session_state["lock_version"] = int(lock.get("version", 0))
+                    st.session_state["lock_owner"] = operator_scope.strip()
+                    st.session_state["authenticated_scope"] = scope
+                    st.warning(msg)
+                else:
+                    st.error(msg)
+            else:
+                st.error("PIN Tim tidak valid untuk ambil alih.")
     with b3:
-        if st.button("Load Context"):
+        if st.button("Muat Konteks"):
             saved = load_work_state(team_scope, str(work_date_scope))
             if saved:
-                st.session_state["team_id"] = saved.get("team_id", team_scope)
                 st.session_state["pelapor"] = saved.get("pelapor", operator_scope)
                 st.session_state["shift"] = saved.get("shift", "1")
                 st.session_state["report_type"] = saved.get("report_type", "non_steril")
                 st.session_state["loaded_details"] = saved.get("details", {})
-                st.info("Context berhasil dimuat.")
+                st.info("Konteks sebelumnya berhasil dimuat.")
             else:
-                st.info("Belum ada context tersimpan untuk scope ini.")
+                st.info("Belum ada konteks tersimpan untuk tim ini.")
+
+    if st.session_state.get("authenticated_scope") != scope:
+        st.warning("Masukkan PIN lalu tekan 'Buka Tim' untuk mulai isi laporan.")
+        st.stop()
 
     st.subheader("Form Control")
     rc1, rc2 = st.columns(2)
@@ -700,14 +776,14 @@ def main() -> None:
     with st.form("giling_form", clear_on_submit=False):
         c1, c2 = st.columns(2)
         with c1:
-            team_id = st.text_input("Team ID", value=st.session_state.get("team_id", ""))
+            team_id = st.text_input("Tim laporan", value=team_scope, disabled=True)
             default_shift = st.session_state.get("shift", "1")
             shift_options = ["1", "2", "3"]
             shift_index = shift_options.index(default_shift) if default_shift in shift_options else 0
             shift = st.selectbox("Shift", options=shift_options, index=shift_index)
         with c2:
-            pelapor = st.text_input("Pelapor", value=st.session_state.get("pelapor", ""))
-            work_date = st.date_input("Tanggal kerja", value=work_date_scope)
+            pelapor = st.text_input("Pelapor", value=st.session_state.get("pelapor", operator_scope))
+            work_date = st.date_input("Tanggal kerja", value=work_date_scope, disabled=True)
 
         report_type = st.radio(
             "Jenis Laporan Giling",
