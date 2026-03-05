@@ -706,6 +706,8 @@ def main() -> None:
         st.session_state["active_idempotency_key"] = str(uuid.uuid4())
     if "authenticated_scope" not in st.session_state:
         st.session_state["authenticated_scope"] = ""
+    if "report_type_confirmed" not in st.session_state:
+        st.session_state["report_type_confirmed"] = st.session_state.get("report_type", "non_steril")
 
     st.subheader("Kontrol Tim")
     lc1, lc2, lc3, lc4 = st.columns(4)
@@ -820,8 +822,18 @@ def main() -> None:
             options=["non_steril", "steril_required"],
             format_func=lambda x: "Barang tidak butuh steril" if x == "non_steril" else "Barang butuh steril",
             index=0 if st.session_state.get("report_type", "non_steril") == "non_steril" else 1,
-            horizontal=False,
+            horizontal=True,
         )
+        st.session_state["report_type"] = report_type
+        confirmed_type = st.session_state.get("report_type_confirmed", "non_steril")
+        report_type_label = "Barang tidak butuh steril" if report_type == "non_steril" else "Barang butuh steril"
+        needs_reconfirm = report_type != confirmed_type
+        confirm_report_type = st.checkbox(
+            f"Saya yakin pilih: {report_type_label}",
+            value=not needs_reconfirm,
+        )
+        if needs_reconfirm:
+            st.warning("Pilihan jenis laporan berubah. Centang konfirmasi sebelum kirim.")
 
         st.markdown("### 1. Produk" if report_type == "non_steril" else "### Data Umum")
         produk = st.text_input("1. Produk" if report_type == "non_steril" else "Produk", value=loaded_details.get("produk", ""))
@@ -1054,6 +1066,10 @@ def main() -> None:
     if submitted:
         common_form = {"team_id": team_id, "pelapor": pelapor, "shift": shift}
         errs = validate_common(common_form)
+        if not confirm_report_type:
+            errs.append("Konfirmasi jenis laporan wajib dicentang sebelum kirim.")
+        else:
+            st.session_state["report_type_confirmed"] = report_type
         lock_ok, lock_err = validate_lock_for_submit(
             team_id.strip(),
             str(work_date),
