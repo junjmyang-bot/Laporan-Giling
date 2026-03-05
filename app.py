@@ -572,14 +572,25 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
         errs.append("Petugas vakum wajib diisi. Jika tidak vakum, isi nama PIC yang bertanggung jawab.")
     if details.get("timer_ada", "") not in {"O", "X"}:
         errs.append("Timer ada? wajib pilih O atau X.")
-    if details["total_fresh_kg"] < 0 or details["total_buang_kg"] < 0:
-        errs.append("Nilai kilogram tidak boleh negatif.")
-    if float(details.get("total_beku_kg", 0.0)) < 0:
-        errs.append("Total barang beku (kg) tidak boleh negatif.")
-    expected = float(details.get("total_beku_kg", 0.0)) + float(details.get("total_fresh_kg", 0.0)) - float(
-        details.get("total_buang_kg", 0.0)
-    )
-    if abs(expected - float(details.get("total_akhir_kg", 0.0))) > 0.001:
+    total_beku_kg = parse_optional_float(details.get("total_beku_kg"))
+    total_fresh_kg = parse_optional_float(details.get("total_fresh_kg"))
+    total_buang_kg = parse_optional_float(details.get("total_buang_kg"))
+    total_akhir_kg = parse_optional_float(details.get("total_akhir_kg"))
+    if total_beku_kg is None:
+        errs.append("Total barang beku (kg) wajib diisi angka.")
+    if total_fresh_kg is None:
+        errs.append("Total bb fresh dipakai (kg) wajib diisi angka.")
+    if total_buang_kg is None:
+        errs.append("Total bb dibuang (kg) wajib diisi angka.")
+    if total_akhir_kg is None:
+        errs.append("Total akhir (kg) wajib diisi angka.")
+    if None not in (total_beku_kg, total_fresh_kg, total_buang_kg, total_akhir_kg):
+        if total_beku_kg < 0 or total_fresh_kg < 0 or total_buang_kg < 0 or total_akhir_kg < 0:
+            errs.append("Nilai kilogram tidak boleh negatif.")
+        expected = total_beku_kg + total_fresh_kg - total_buang_kg
+        if abs(expected - total_akhir_kg) > 0.001:
+            errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
+    else:
         errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
     if details.get("sudah_dikirim_semua", "") == "X" and not details.get("nama_pic_cek", "").strip():
         errs.append("Jika 'Sudah dikirim semua' = X, petugas cek wajib diisi.")
@@ -994,29 +1005,25 @@ def main() -> None:
                 "Total barang beku diambil (contoh: sim km 20 pack)",
                 value=loaded_details.get("total_beku", ""),
             )
-            total_beku_kg = st.number_input(
+            total_beku_kg = st.text_input(
                 "Total barang beku (kg, angka untuk validasi)",
-                min_value=0.0,
-                step=1.0,
-                value=float(loaded_details.get("total_beku_kg", 0.0)),
+                value=str(loaded_details.get("total_beku_kg", "")),
+                placeholder="contoh: 75",
             )
-            total_fresh_kg = st.number_input(
+            total_fresh_kg = st.text_input(
                 "Total bb fresh dipakai (kg)",
-                min_value=0.0,
-                step=1.0,
-                value=float(loaded_details.get("total_fresh_kg", 0.0)),
+                value=str(loaded_details.get("total_fresh_kg", "")),
+                placeholder="contoh: 225",
             )
-            total_buang_kg = st.number_input(
+            total_buang_kg = st.text_input(
                 "Total bb dibuang (kg)",
-                min_value=0.0,
-                step=1.0,
-                value=float(loaded_details.get("total_buang_kg", 0.0)),
+                value=str(loaded_details.get("total_buang_kg", "")),
+                placeholder="contoh: 0",
             )
-            total_akhir_kg = st.number_input(
+            total_akhir_kg = st.text_input(
                 "Total akhir (kg)",
-                min_value=0.0,
-                step=1.0,
-                value=float(loaded_details.get("total_akhir_kg", 0.0)),
+                value=str(loaded_details.get("total_akhir_kg", "")),
+                placeholder="contoh: 225",
             )
             with st.expander("Jika total berubah vs laporan sebelumnya", expanded=False):
                 total_change_reason = st.text_input(
