@@ -293,7 +293,7 @@ def inject_compact_ui_theme() -> None:
         """
 <style>
 [data-testid="stAppViewContainer"] {
-  background: #f2f5f1;
+  background: #eef6fb;
 }
 [data-testid="stHeader"] {
   background: transparent;
@@ -305,34 +305,50 @@ def inject_compact_ui_theme() -> None:
 }
 div[data-testid="stVerticalBlockBorderWrapper"] {
   background: #ffffff;
-  border: 1px solid #d5dfd3;
+  border: 1px solid #c8dced;
   border-radius: 14px;
 }
 h1, h2, h3 {
-  color: #1b2c20;
+  color: #17324d;
 }
 div[data-testid="stTextInput"] input,
 div[data-testid="stTextArea"] textarea {
   background: #ffffff;
-  border: 1px solid #c8d5c6;
+  border: 1px solid #bed5e8;
   border-radius: 10px;
+  overflow-wrap: anywhere;
 }
 div[data-baseweb="select"] > div {
   background: #ffffff;
-  border: 1px solid #c8d5c6;
+  border: 1px solid #bed5e8;
   border-radius: 10px;
 }
+div[data-baseweb="select"] span,
+div[data-baseweb="select"] div {
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
 div.stButton > button {
-  background: #2d8f5b;
+  background: #1ea7e1;
   color: #ffffff;
   border: none;
   border-radius: 10px;
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   padding: 0.42rem 0.8rem;
+  height: auto;
+  min-height: 2.4rem;
 }
 div.stButton > button:hover {
-  background: #26784d;
+  background: #0f95d4;
+}
+[data-testid="stCodeBlock"] pre,
+[data-testid="stCode"] pre {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
 }
 </style>
         """,
