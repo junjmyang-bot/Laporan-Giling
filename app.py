@@ -838,19 +838,14 @@ def main() -> None:
         st.markdown("### 1. Produk" if report_type == "non_steril" else "### Data Umum")
         produk = st.text_input("1. Produk" if report_type == "non_steril" else "Produk", value=loaded_details.get("produk", ""))
         alat = st.text_input("1-1. Nama alat" if report_type == "non_steril" else "Nama alat", value=loaded_details.get("alat", ""))
-        timer_ada = st.selectbox(
-            "1-4. Timer ada ?" if report_type == "non_steril" else "Timer ada?",
-            options=["O", "X"],
-            index=0 if loaded_details.get("timer_ada", "O") == "O" else 1,
-        )
         petugas_steril = st.text_input(
             "1-3. Petugas steril" if report_type == "non_steril" else "Petugas steril / vakum",
             value=loaded_details.get("petugas_steril", ""),
         )
-        total_change_reason = st.text_input("Alasan jika total berubah vs laporan sebelumnya", value=loaded_details.get("total_change_reason", ""))
-        tl_confirm_phrase = st.text_input(
-            "Konfirmasi TL (wajib isi 'SUDAH DIKONFIRMASI TL' jika total berubah)",
-            value=loaded_details.get("tl_confirm_phrase", ""),
+        timer_ada = st.selectbox(
+            "1-4. Timer ada ?" if report_type == "non_steril" else "Timer ada?",
+            options=["O", "X"],
+            index=0 if loaded_details.get("timer_ada", "O") == "O" else 1,
         )
 
         details: Dict[str, Any] = {}
@@ -896,6 +891,17 @@ def main() -> None:
                 step=1.0,
                 value=float(loaded_details.get("total_akhir_kg", 0.0)),
             )
+            with st.expander("Jika total berubah vs laporan sebelumnya", expanded=False):
+                total_change_reason = st.text_input(
+                    "Alasan perubahan total",
+                    value=loaded_details.get("total_change_reason", ""),
+                    key="ns_total_change_reason",
+                )
+                tl_confirm_phrase = st.text_input(
+                    "Konfirmasi TL (isi persis: SUDAH DIKONFIRMASI TL)",
+                    value=loaded_details.get("tl_confirm_phrase", ""),
+                    key="ns_tl_confirm_phrase",
+                )
             st.markdown("### 2-2. Tempat buang pillow defrost")
             tempat_buang_siap = st.selectbox(
                 "Tempat buang pillow siap dekat meja/rak?",
@@ -988,6 +994,17 @@ def main() -> None:
                 step=1.0,
                 value=float(loaded_details.get("total_akhir_kg", 0.0)),
             )
+            with st.expander("Jika total berubah vs laporan sebelumnya", expanded=False):
+                total_change_reason = st.text_input(
+                    "Alasan perubahan total",
+                    value=loaded_details.get("total_change_reason", ""),
+                    key="st_total_change_reason",
+                )
+                tl_confirm_phrase = st.text_input(
+                    "Konfirmasi TL (isi persis: SUDAH DIKONFIRMASI TL)",
+                    value=loaded_details.get("tl_confirm_phrase", ""),
+                    key="st_tl_confirm_phrase",
+                )
             tempat_buang_siap = st.selectbox(
                 "Tempat buang pillow siap dekat meja/rak?",
                 options=["O", "X"],
