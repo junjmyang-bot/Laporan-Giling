@@ -294,7 +294,7 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
         ),
         "\n".join(
             [
-                "2-2. Tempat buang pillow defrost sudah siap dekat meja/rak?",
+                "2-2. Tempat buang pillow sudah siap dekat meja/rak, dan sudah dikosongkan kalau sudah penuh?",
                 f"-> {d.get('tempat_buang_siap', '-') or '-'}",
             ]
         ),
@@ -353,7 +353,7 @@ def render_steril_blocks(payload: Dict[str, Any]) -> List[str]:
             ("Total BB fresh dipakai", f"{d.get('total_fresh_kg', '')} kg"),
             ("Total BB dibuang", f"{d.get('total_buang_kg', '')} kg"),
             ("Total akhir", f"{d.get('total_akhir_kg', '')} kg"),
-            ("Tempat buang pillow siap", d.get("tempat_buang_siap", "")),
+            ("Tempat buang pillow siap & dikosongkan saat penuh", d.get("tempat_buang_siap", "")),
             ("Total giling", d.get("total_giling", "")),
             ("Total produk steril", d.get("total_produk_steril", "")),
             ("CB siap", d.get("cb_siap", "")),
@@ -1036,9 +1036,9 @@ def main() -> None:
                     value=loaded_details.get("tl_confirm_phrase", ""),
                     key="ns_tl_confirm_phrase",
                 )
-            st.markdown("### 2-2. Tempat buang pillow defrost")
+            st.markdown("### 2-2. Tempat buang pillow")
             tempat_buang_siap = st.selectbox(
-                "Tempat buang pillow siap dekat meja/rak?",
+                "Tempat buang pillow sudah siap dekat meja/rak, dan sudah dikosongkan kalau sudah penuh? (O/X tiap laporan)",
                 options=["O", "X"],
                 index=0 if loaded_details.get("tempat_buang_siap", "O") == "O" else 1,
             )
@@ -1161,7 +1161,7 @@ def main() -> None:
                     key="st_tl_confirm_phrase",
                 )
             tempat_buang_siap = st.selectbox(
-                "Tempat buang pillow siap dekat meja/rak?",
+                "Tempat buang pillow sudah siap dekat meja/rak, dan sudah dikosongkan kalau sudah penuh? (O/X tiap laporan)",
                 options=["O", "X"],
                 index=0 if loaded_details.get("tempat_buang_siap", "O") == "O" else 1,
             )
