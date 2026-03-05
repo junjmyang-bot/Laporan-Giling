@@ -154,6 +154,29 @@ def parse_name_lines(value: str) -> List[str]:
     return out
 
 
+def ensure_row_count_from_session(
+    count_key: str,
+    field_prefixes: List[str],
+    min_rows: int = 1,
+    max_rows: int = 20,
+) -> int:
+    requested = int(st.session_state.get(count_key, min_rows))
+    detected = 0
+    for idx in range(max_rows):
+        has_value = False
+        for prefix in field_prefixes:
+            val = str(st.session_state.get(f"{prefix}{idx}", "")).strip()
+            if val:
+                has_value = True
+                break
+        if has_value:
+            detected = idx + 1
+    final_rows = max(min_rows, requested, detected)
+    final_rows = min(max_rows, final_rows)
+    st.session_state[count_key] = final_rows
+    return final_rows
+
+
 def informative_lines(pairs: List[Tuple[str, Any]]) -> List[str]:
     lines: List[str] = []
     for label, value in pairs:
@@ -966,7 +989,12 @@ def main() -> None:
                         st.rerun()
                 with d3:
                     st.caption(f"Jumlah baris defrost: {int(st.session_state.get('defrost_rows_non', 1))}")
-                row_count = int(st.session_state.get("defrost_rows_non", 2))
+                row_count = ensure_row_count_from_session(
+                    "defrost_rows_non",
+                    ["def_jam_non_", "def_isi_non_", "def_kg_non_", "def_cat_non_"],
+                    min_rows=1,
+                    max_rows=20,
+                )
                 defrost_lines: List[str] = []
                 for idx in range(int(row_count)):
                     dc1, dc2, dc3, dc4 = st.columns([2, 3, 2, 3])
@@ -1057,7 +1085,12 @@ def main() -> None:
                         st.rerun()
                 with g3:
                     st.caption(f"Jumlah baris giling: {int(st.session_state.get('giling_rows_non', 1))}")
-                row_count_giling = int(st.session_state.get("giling_rows_non", 1))
+                row_count_giling = ensure_row_count_from_session(
+                    "giling_rows_non",
+                    ["gil_jam_non_", "gil_isi_non_", "gil_kg_non_", "gil_cat_non_"],
+                    min_rows=1,
+                    max_rows=20,
+                )
                 giling_lines: List[str] = []
                 for idx in range(int(row_count_giling)):
                     gc1, gc2, gc3, gc4 = st.columns([2, 3, 2, 3])
