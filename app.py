@@ -395,7 +395,6 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
                 "1. PRODUK",
                 f"- Jam kerja: {d.get('jam_kerja_mulai', '-')} - {d.get('jam_kerja_selesai', '-')}",
                 f"- Produk: {d.get('produk', '-') or '-'}",
-                f"- 1-1. Nama alat: {d.get('alat', '-') or '-'}",
                 f"- 1-2. Jumlah isi barang dalam pillow: {d.get('isi_pillow_kg', '-') or '-'}",
                 f"- 1-3. Nama petugas: {nama_petugas_txt}",
                 f"- 1-4. Timer ada?: {d.get('timer_ada', '-') or '-'}",
@@ -699,8 +698,6 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
     errs: List[str] = []
     if not details["produk"].strip():
         errs.append("Produk wajib diisi.")
-    if not details.get("alat", "").strip():
-        errs.append("Nama alat wajib diisi.")
     if not details.get("nama_petugas_list", []):
         errs.append("1-3 Nama petugas wajib diisi (bisa lebih dari satu nama).")
     if not details.get("petugas_vacum", "").strip():
@@ -1191,24 +1188,10 @@ def main() -> None:
 
         report_type = st.session_state.get("report_type_confirmed", "non_steril")
 
-        st.markdown("### 1. Produk" if report_type == "non_steril" else "### Data Umum")
-        produk = st.text_input("1. Produk" if report_type == "non_steril" else "Produk", value=loaded_details.get("produk", ""))
-        alat = st.text_input("1-1. Nama alat" if report_type == "non_steril" else "Nama alat", value=loaded_details.get("alat", ""))
-        nama_petugas_raw = st.text_area(
-            "1-3. Nama Petugas (satu baris satu nama)",
-            value=loaded_details.get("nama_petugas_raw", ""),
-            placeholder="Linda\nLian",
-        )
-        st.caption("Tambah manual: 1 baris = 1 nama petugas.")
-        nama_petugas_list = parse_name_lines(nama_petugas_raw)
-        timer_ada = st.selectbox(
-            "1-4. Timer ada ?" if report_type == "non_steril" else "Timer ada?",
-            options=["O", "X"],
-            index=0 if loaded_details.get("timer_ada", "O") == "O" else 1,
-        )
-
         details: Dict[str, Any] = {}
         if report_type == "non_steril":
+            st.markdown("### 1. Produk")
+            produk = st.text_input("1. Produk", value=loaded_details.get("produk", ""))
             st.markdown("### 1-2. Jumlah isi barang dalam pillow")
             isi_pillow_kg = st.text_input(
                 "Jumlah isi barang dalam pillow (kg)",
@@ -1220,6 +1203,19 @@ def main() -> None:
                 value=loaded_details.get("petugas_vacum", ""),
                 placeholder="Nama petugas vakum / nama PIC",
             )
+            nama_petugas_raw = st.text_area(
+                "1-3. Nama Petugas (satu baris satu nama)",
+                value=loaded_details.get("nama_petugas_raw", ""),
+                placeholder="Linda\nLian",
+            )
+            st.caption("Tambah manual: 1 baris = 1 nama petugas.")
+            nama_petugas_list = parse_name_lines(nama_petugas_raw)
+            timer_ada = st.selectbox(
+                "1-4. Timer ada ?",
+                options=["O", "X"],
+                index=0 if loaded_details.get("timer_ada", "O") == "O" else 1,
+            )
+            alat = ""
             st.markdown("### 2-1. Status defrost")
             mode_defrost = st.radio(
                 "Cara isi status defrost",
@@ -2040,6 +2036,21 @@ def main() -> None:
                 "tl_confirm_phrase": tl_confirm_phrase,
             }
         else:
+            st.markdown("### Data Umum")
+            produk = st.text_input("Produk", value=loaded_details.get("produk", ""))
+            alat = st.text_input("Nama alat", value=loaded_details.get("alat", ""))
+            nama_petugas_raw = st.text_area(
+                "Nama Petugas (satu baris satu nama)",
+                value=loaded_details.get("nama_petugas_raw", ""),
+                placeholder="Linda\nLian",
+            )
+            st.caption("Tambah manual: 1 baris = 1 nama petugas.")
+            nama_petugas_list = parse_name_lines(nama_petugas_raw)
+            timer_ada = st.selectbox(
+                "Timer ada?",
+                options=["O", "X"],
+                index=0 if loaded_details.get("timer_ada", "O") == "O" else 1,
+            )
             st.markdown("### Form Steril-Required")
             petugas_steril = st.text_input(
                 "Petugas steril (wajib)",
