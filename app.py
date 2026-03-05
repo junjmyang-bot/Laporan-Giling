@@ -358,7 +358,8 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
                 f"-> Diterima packing: {d.get('total_diterima_packing', '-') or '-'} pack",
                 f"-> Selisih: {d.get('selisih_handover_packing', '-') or '-'} pack",
                 f"-> Status cocok: {d.get('status_handover_packing', '-') or '-'}",
-                f"-> Penerima packing/press: {d.get('nama_penerima_packing', '-') or '-'}",
+                f"-> Packing TL: {d.get('nama_tl_packing', '-') or '-'}",
+                f"-> Packing 담당자: {d.get('nama_pic_packing', '-') or '-'}",
                 f"-> Jam serah-terima: {d.get('jam_serah_terima_packing', '-') or '-'}",
                 f"-> Alasan selisih (jika ada): {d.get('alasan_selisih_packing', '-') or '-'}",
             ]
@@ -643,8 +644,10 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
         selisih = total_dikirim_packing - total_diterima_packing
         if abs(selisih) > 0.001 and not details.get("alasan_selisih_packing", "").strip():
             errs.append("Ada selisih kirim vs terima. Alasan selisih wajib diisi.")
-    if not details.get("nama_penerima_packing", "").strip():
-        errs.append("Nama penerima packing/press wajib diisi.")
+    if not details.get("nama_tl_packing", "").strip():
+        errs.append("Nama TL packing wajib diisi.")
+    if not details.get("nama_pic_packing", "").strip():
+        errs.append("Nama PIC/담당자 packing wajib diisi.")
     if not details.get("jam_serah_terima_packing", "").strip():
         errs.append("Jam serah-terima packing/press wajib diisi.")
     if details.get("tempat_buang_siap", "") not in {"O", "X"}:
@@ -1323,9 +1326,14 @@ def main() -> None:
                 value=loaded_details.get("total_diterima_packing", ""),
                 placeholder="contoh: 116",
             )
-            nama_penerima_packing = st.text_input(
-                "Nama penerima packing/press",
-                value=loaded_details.get("nama_penerima_packing", ""),
+            nama_tl_packing = st.text_input(
+                "Nama TL packing",
+                value=loaded_details.get("nama_tl_packing", ""),
+                placeholder="contoh: Ibu Rina",
+            )
+            nama_pic_packing = st.text_input(
+                "Nama PIC/담당자 packing",
+                value=loaded_details.get("nama_pic_packing", ""),
                 placeholder="contoh: Siti",
             )
             jam_serah_terima_packing = st.text_input(
@@ -1385,7 +1393,8 @@ def main() -> None:
                 "total_diterima_packing": total_diterima_packing,
                 "selisih_handover_packing": selisih_display,
                 "status_handover_packing": status_handover_packing,
-                "nama_penerima_packing": nama_penerima_packing,
+                "nama_tl_packing": nama_tl_packing,
+                "nama_pic_packing": nama_pic_packing,
                 "jam_serah_terima_packing": jam_serah_terima_packing,
                 "alasan_selisih_packing": alasan_selisih_packing,
                 "catatan": catatan,
