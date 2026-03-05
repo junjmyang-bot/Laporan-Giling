@@ -888,50 +888,8 @@ def main() -> None:
                 st.session_state["pending_report_type"] = ""
                 st.rerun()
 
-    # Dynamic controls are placed outside form to allow immediate rerender.
-    if st.session_state.get("report_type_confirmed", "non_steril") == "non_steril":
-        st.markdown("### Pengaturan Status Defrost")
-        mode_defrost = st.radio(
-            "Cara isi status defrost",
-            options=["List baris", "Tulis manual"],
-            horizontal=True,
-            key="mode_defrost_non",
-        )
-        if mode_defrost == "List baris":
-            d1, d2, d3 = st.columns([2, 2, 6])
-            with d1:
-                if st.button("+ Tambah baris", key="btn_add_defrost", use_container_width=True):
-                    st.session_state["defrost_rows_non"] = min(20, int(st.session_state.get("defrost_rows_non", 1)) + 1)
-                    st.rerun()
-            with d2:
-                if st.button("- Hapus baris", key="btn_del_defrost", use_container_width=True):
-                    st.session_state["defrost_rows_non"] = max(1, int(st.session_state.get("defrost_rows_non", 1)) - 1)
-                    st.rerun()
-            with d3:
-                st.caption(f"Jumlah baris defrost: {int(st.session_state.get('defrost_rows_non', 1))}")
-
-        st.markdown("### Pengaturan Status Giling")
-        mode_giling = st.radio(
-            "Cara isi status giling",
-            options=["List baris", "Tulis manual"],
-            horizontal=True,
-            key="mode_giling_non",
-        )
-        if mode_giling == "List baris":
-            g1, g2, g3 = st.columns([2, 2, 6])
-            with g1:
-                if st.button("+ Tambah baris giling", key="btn_add_giling", use_container_width=True):
-                    st.session_state["giling_rows_non"] = min(20, int(st.session_state.get("giling_rows_non", 1)) + 1)
-                    st.rerun()
-            with g2:
-                if st.button("- Hapus baris giling", key="btn_del_giling", use_container_width=True):
-                    st.session_state["giling_rows_non"] = max(1, int(st.session_state.get("giling_rows_non", 1)) - 1)
-                    st.rerun()
-            with g3:
-                st.caption(f"Jumlah baris giling: {int(st.session_state.get('giling_rows_non', 1))}")
-
     loaded_details = st.session_state.get("loaded_details", {})
-    with st.form("giling_form", clear_on_submit=False):
+    with st.container():
         top1, top2, top3 = st.columns(3)
         with top1:
             team_id = st.text_input("Tim laporan", value=team_scope, disabled=True)
@@ -990,8 +948,24 @@ def main() -> None:
                 placeholder="Nama petugas vakum / nama PIC",
             )
             st.markdown("### 2-1. Status defrost")
-            mode_defrost = st.session_state.get("mode_defrost_non", "List baris")
+            mode_defrost = st.radio(
+                "Cara isi status defrost",
+                options=["List baris", "Tulis manual"],
+                horizontal=True,
+                key="mode_defrost_non",
+            )
             if mode_defrost == "List baris":
+                d1, d2, d3 = st.columns([2, 2, 6])
+                with d1:
+                    if st.button("+ Tambah baris", key="btn_add_defrost", use_container_width=True):
+                        st.session_state["defrost_rows_non"] = min(20, int(st.session_state.get("defrost_rows_non", 1)) + 1)
+                        st.rerun()
+                with d2:
+                    if st.button("- Hapus baris", key="btn_del_defrost", use_container_width=True):
+                        st.session_state["defrost_rows_non"] = max(1, int(st.session_state.get("defrost_rows_non", 1)) - 1)
+                        st.rerun()
+                with d3:
+                    st.caption(f"Jumlah baris defrost: {int(st.session_state.get('defrost_rows_non', 1))}")
                 row_count = int(st.session_state.get("defrost_rows_non", 2))
                 defrost_lines: List[str] = []
                 for idx in range(int(row_count)):
@@ -1065,8 +1039,24 @@ def main() -> None:
                 index=0 if loaded_details.get("tempat_buang_siap", "O") == "O" else 1,
             )
             st.markdown("### 3-1. Status Giling")
-            mode_giling = st.session_state.get("mode_giling_non", "List baris")
+            mode_giling = st.radio(
+                "Cara isi status giling",
+                options=["List baris", "Tulis manual"],
+                horizontal=True,
+                key="mode_giling_non",
+            )
             if mode_giling == "List baris":
+                g1, g2, g3 = st.columns([2, 2, 6])
+                with g1:
+                    if st.button("+ Tambah baris giling", key="btn_add_giling", use_container_width=True):
+                        st.session_state["giling_rows_non"] = min(20, int(st.session_state.get("giling_rows_non", 1)) + 1)
+                        st.rerun()
+                with g2:
+                    if st.button("- Hapus baris giling", key="btn_del_giling", use_container_width=True):
+                        st.session_state["giling_rows_non"] = max(1, int(st.session_state.get("giling_rows_non", 1)) - 1)
+                        st.rerun()
+                with g3:
+                    st.caption(f"Jumlah baris giling: {int(st.session_state.get('giling_rows_non', 1))}")
                 row_count_giling = int(st.session_state.get("giling_rows_non", 1))
                 giling_lines: List[str] = []
                 for idx in range(int(row_count_giling)):
@@ -1270,7 +1260,7 @@ def main() -> None:
             "Existing Telegram message IDs (optional, comma separated for edit-first)",
             value="",
         )
-        submitted = st.form_submit_button("Kirim Laporan")
+        submitted = st.button("Kirim Laporan", type="primary")
 
     prev_state_snapshot = load_work_state(team_id.strip(), str(work_date))
     # Persist current working context after form render.
