@@ -354,7 +354,13 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
         "\n".join(
             [
                 "5. TOTAL BARANG DIKIRIM KE PACKING (ATAU PRESS)",
-                f"-> {d.get('total_dikirim_packing', '-') or '-'}",
+                f"-> Dikirim kupas: {d.get('total_dikirim_packing', '-') or '-'} pack",
+                f"-> Diterima packing: {d.get('total_diterima_packing', '-') or '-'} pack",
+                f"-> Selisih: {d.get('selisih_handover_packing', '-') or '-'} pack",
+                f"-> Status cocok: {d.get('status_handover_packing', '-') or '-'}",
+                f"-> Penerima packing/press: {d.get('nama_penerima_packing', '-') or '-'}",
+                f"-> Jam serah-terima: {d.get('jam_serah_terima_packing', '-') or '-'}",
+                f"-> Alasan selisih (jika ada): {d.get('alasan_selisih_packing', '-') or '-'}",
             ]
         ),
         "\n".join(["CATATAN", d.get("catatan", "-") or "-"]),
@@ -625,8 +631,22 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
         errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
     if details.get("sudah_dikirim_semua", "") == "X" and not details.get("nama_pic_cek", "").strip():
         errs.append("Jika 'Sudah dikirim semua' = X, petugas cek wajib diisi.")
-    if not details.get("total_dikirim_packing", "").strip():
-        errs.append("Total barang dikirim ke packing/press wajib diisi untuk handover.")
+    total_dikirim_packing = parse_optional_float(details.get("total_dikirim_packing"))
+    total_diterima_packing = parse_optional_float(details.get("total_diterima_packing"))
+    if total_dikirim_packing is None:
+        errs.append("Total dikirim kupas ke packing/press wajib diisi angka.")
+    if total_diterima_packing is None:
+        errs.append("Total diterima packing/press wajib diisi angka.")
+    if total_dikirim_packing is not None and total_diterima_packing is not None:
+        if total_dikirim_packing < 0 or total_diterima_packing < 0:
+            errs.append("Nilai handover packing tidak boleh negatif.")
+        selisih = total_dikirim_packing - total_diterima_packing
+        if abs(selisih) > 0.001 and not details.get("alasan_selisih_packing", "").strip():
+            errs.append("Ada selisih kirim vs terima. Alasan selisih wajib diisi.")
+    if not details.get("nama_penerima_packing", "").strip():
+        errs.append("Nama penerima packing/press wajib diisi.")
+    if not details.get("jam_serah_terima_packing", "").strip():
+        errs.append("Jam serah-terima packing/press wajib diisi.")
     if details.get("tempat_buang_siap", "") not in {"O", "X"}:
         errs.append("2-2 wajib dipilih O atau X pada setiap laporan.")
     if details.get("giling_delay_lama", "") not in {"O", "X"}:
@@ -1294,9 +1314,38 @@ def main() -> None:
             )
             st.markdown("### 5. Total barang dikirim ke packing (atau press)")
             total_dikirim_packing = st.text_input(
-                "Total barang dikirim ke packing/press",
+                "Total dikirim kupas ke packing/press (pack)",
                 value=loaded_details.get("total_dikirim_packing", ""),
-                placeholder="contoh: 120 pack ke packing",
+                placeholder="contoh: 120",
+            )
+            total_diterima_packing = st.text_input(
+                "Total diterima packing/press (pack)",
+                value=loaded_details.get("total_diterima_packing", ""),
+                placeholder="contoh: 116",
+            )
+            nama_penerima_packing = st.text_input(
+                "Nama penerima packing/press",
+                value=loaded_details.get("nama_penerima_packing", ""),
+                placeholder="contoh: Siti",
+            )
+            jam_serah_terima_packing = st.text_input(
+                "Jam serah-terima packing/press (HH:MM)",
+                value=loaded_details.get("jam_serah_terima_packing", ""),
+                placeholder="contoh: 14:20",
+            )
+            kirim_val = parse_optional_float(total_dikirim_packing)
+            terima_val = parse_optional_float(total_diterima_packing)
+            selisih_display = ""
+            status_handover_packing = ""
+            if kirim_val is not None and terima_val is not None:
+                selisih = kirim_val - terima_val
+                selisih_display = f"{selisih:.3f}".rstrip("0").rstrip(".")
+                status_handover_packing = "O" if abs(selisih) <= 0.001 else "X"
+                st.caption(f"Selisih otomatis (kirim - terima): {selisih_display} pack | Status cocok: {status_handover_packing}")
+            alasan_selisih_packing = st.text_area(
+                "Alasan selisih (wajib jika status cocok = X)",
+                value=loaded_details.get("alasan_selisih_packing", ""),
+                placeholder="contoh: 4 pack pecah saat proses vacum",
             )
             catatan = st.text_area("Catatan tambahan", value=loaded_details.get("catatan", ""))
 
@@ -1333,6 +1382,12 @@ def main() -> None:
                 "nama_pic_cek": nama_pic_cek,
                 "masalah_total_barang": masalah_total_barang,
                 "total_dikirim_packing": total_dikirim_packing,
+                "total_diterima_packing": total_diterima_packing,
+                "selisih_handover_packing": selisih_display,
+                "status_handover_packing": status_handover_packing,
+                "nama_penerima_packing": nama_penerima_packing,
+                "jam_serah_terima_packing": jam_serah_terima_packing,
+                "alasan_selisih_packing": alasan_selisih_packing,
                 "catatan": catatan,
                 "total_change_reason": total_change_reason,
                 "tl_confirm_phrase": tl_confirm_phrase,
