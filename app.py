@@ -125,6 +125,16 @@ def parse_optional_float(value: str) -> Optional[float]:
         return None
 
 
+def parse_optional_int(value: Any, default: int = 0) -> int:
+    try:
+        raw = str(value).strip()
+        if not raw:
+            return default
+        return int(float(raw))
+    except Exception:
+        return default
+
+
 def informative_lines(pairs: List[Tuple[str, Any]]) -> List[str]:
     lines: List[str] = []
     for label, value in pairs:
@@ -235,33 +245,53 @@ def render_header_block(payload: Dict[str, Any]) -> str:
 
 def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
     d = payload["details"]
-    petugas_lines = informative_lines(
-        [
-            ("Petugas steril/vakum", normalize_name(d.get("petugas_steril", ""))),
-            ("Timer ada", d.get("timer_ada", "")),
-        ]
-    )
-    detail_lines = informative_lines(
-        [
-            ("Produk", d.get("produk", "")),
-            ("Nama alat", d.get("alat", "")),
-            ("Isi per pillow", f"{d.get('isi_pillow_kg', '')} kg"),
-            ("Total barang beku diambil", d.get("total_beku", "")),
-            ("Total barang beku (kg)", d.get("total_beku_kg", "")),
-            ("Total BB fresh dipakai", f"{d.get('total_fresh_kg', '')} kg"),
-            ("Total BB dibuang", f"{d.get('total_buang_kg', '')} kg"),
-            ("Total akhir", f"{d.get('total_akhir_kg', '')} kg"),
-            ("Tempat buang pillow siap", d.get("tempat_buang_siap", "")),
-            ("Total giling", d.get("total_giling", "")),
-            ("Total hasil vakum", d.get("total_hasil_vakum", "")),
-            ("Sudah dikirim semua", d.get("sudah_dikirim_semua", "")),
-            ("PIC cek (jika belum)", d.get("nama_pic_cek", "")),
-            ("Handover sisa", d.get("handover_sisa", "")),
-        ]
-    )
+    status_defrost = str(d.get("status_defrost", "")).strip() or "-"
+    status_giling = str(d.get("status_giling", "")).strip() or "-"
+    status_vacum = str(d.get("status_vacum", "")).strip() or "-"
+    petugas = normalize_name(d.get("petugas_steril", ""))
     return [
-        "\n".join(["PETUGAS"] + (petugas_lines or ["- Tidak ada data petugas"])),
-        "\n".join(["DETAIL KERJA"] + (detail_lines or ["- Tidak ada data detail"])),
+        "\n".join(
+            [
+                "1. PRODUK",
+                f"- Produk: {d.get('produk', '-') or '-'}",
+                f"- 1-1. Nama alat: {d.get('alat', '-') or '-'}",
+                f"- 1-2. Jumlah isi barang dalam pillow: {d.get('isi_pillow_kg', 0)} kg",
+                f"- 1-3. Petugas steril: {petugas or '-'}",
+                f"- 1-4. Timer ada?: {d.get('timer_ada', '-') or '-'}",
+            ]
+        ),
+        "\n".join(
+            [
+                "2-1. STATUS DEFROST",
+                status_defrost,
+                f"-> Total barang beku diambil: {d.get('total_beku', '-') or '-'}",
+                f"-> Total bb fresh dipakai: {d.get('total_fresh_kg', 0)} kg",
+                f"-> Total bb dibuang: {d.get('total_buang_kg', 0)} kg",
+                f"-> Total: {d.get('total_akhir_kg', 0)} kg (jenis barang 1 + jenis barang 2)",
+            ]
+        ),
+        "\n".join(
+            [
+                "2-2. Tempat buang pillow defrost sudah siap dekat meja/rak?",
+                f"-> {d.get('tempat_buang_siap', '-') or '-'}",
+            ]
+        ),
+        "\n".join(
+            [
+                "3-1. STATUS GILING",
+                status_giling,
+                f"--> Total Giling: {d.get('total_giling', '-') or '-'} resep",
+            ]
+        ),
+        "\n".join(
+            [
+                "3-2. STATUS VACUM",
+                status_vacum,
+                f"-> Total hasil vakum: {d.get('total_hasil_vakum', '-') or '-'} pack",
+                f"-> Sudah dikirim semua?: {d.get('sudah_dikirim_semua', '-') or '-'}",
+                f"-> Petugas cek: {d.get('nama_pic_cek', '-') or '-'}",
+            ]
+        ),
         "\n".join(["CATATAN", d.get("catatan", "-") or "-"]),
     ]
 
@@ -496,6 +526,12 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
     errs: List[str] = []
     if not details["produk"].strip():
         errs.append("Produk wajib diisi.")
+    if not details.get("alat", "").strip():
+        errs.append("Nama alat wajib diisi.")
+    if not details.get("petugas_steril", "").strip():
+        errs.append("Petugas steril wajib diisi.")
+    if details.get("timer_ada", "") not in {"O", "X"}:
+        errs.append("Timer ada? wajib pilih O atau X.")
     if details["total_fresh_kg"] < 0 or details["total_buang_kg"] < 0:
         errs.append("Nilai kilogram tidak boleh negatif.")
     if float(details.get("total_beku_kg", 0.0)) < 0:
@@ -505,6 +541,8 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
     )
     if abs(expected - float(details.get("total_akhir_kg", 0.0))) > 0.001:
         errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
+    if details.get("sudah_dikirim_semua", "") == "X" and not details.get("nama_pic_cek", "").strip():
+        errs.append("Jika 'Sudah dikirim semua' = X, petugas cek wajib diisi.")
     return errs
 
 
@@ -793,15 +831,18 @@ def main() -> None:
             horizontal=False,
         )
 
-        st.markdown("### Data Umum")
-        produk = st.text_input("Produk", value=loaded_details.get("produk", ""))
-        alat = st.text_input("Nama alat", value=loaded_details.get("alat", ""))
+        st.markdown("### 1. Produk" if report_type == "non_steril" else "### Data Umum")
+        produk = st.text_input("1. Produk" if report_type == "non_steril" else "Produk", value=loaded_details.get("produk", ""))
+        alat = st.text_input("1-1. Nama alat" if report_type == "non_steril" else "Nama alat", value=loaded_details.get("alat", ""))
         timer_ada = st.selectbox(
-            "Timer ada?",
+            "1-4. Timer ada ?" if report_type == "non_steril" else "Timer ada?",
             options=["O", "X"],
             index=0 if loaded_details.get("timer_ada", "O") == "O" else 1,
         )
-        petugas_steril = st.text_input("Petugas steril / vakum", value=loaded_details.get("petugas_steril", ""))
+        petugas_steril = st.text_input(
+            "1-3. Petugas steril" if report_type == "non_steril" else "Petugas steril / vakum",
+            value=loaded_details.get("petugas_steril", ""),
+        )
         total_change_reason = st.text_input("Alasan jika total berubah vs laporan sebelumnya", value=loaded_details.get("total_change_reason", ""))
         tl_confirm_phrase = st.text_input(
             "Konfirmasi TL (wajib isi 'SUDAH DIKONFIRMASI TL' jika total berubah)",
@@ -810,12 +851,18 @@ def main() -> None:
 
         details: Dict[str, Any] = {}
         if report_type == "non_steril":
-            st.markdown("### Form Non-Steril")
+            st.markdown("### 1-2. Jumlah isi barang dalam pillow")
             isi_pillow_kg = st.number_input(
                 "Jumlah isi barang dalam pillow (kg)",
                 min_value=0.0,
                 step=0.5,
                 value=float(loaded_details.get("isi_pillow_kg", 0.0)),
+            )
+            st.markdown("### 2-1. Status defrost")
+            status_defrost = st.text_area(
+                "Status defrost (Kalau sudah habis dipakai, tulis habis)",
+                value=loaded_details.get("status_defrost", ""),
+                placeholder="- 12:55 BB fresh = 75kg\n- 13:00 BB fresh = 75kg",
             )
             total_beku = st.text_input(
                 "Total barang beku diambil (contoh: sim km 20 pack)",
@@ -845,20 +892,42 @@ def main() -> None:
                 step=1.0,
                 value=float(loaded_details.get("total_akhir_kg", 0.0)),
             )
+            st.markdown("### 2-2. Tempat buang pillow defrost")
             tempat_buang_siap = st.selectbox(
                 "Tempat buang pillow siap dekat meja/rak?",
                 options=["O", "X"],
                 index=0 if loaded_details.get("tempat_buang_siap", "O") == "O" else 1,
             )
-            total_giling = st.text_input("Total giling (contoh: 15 resep)", value=loaded_details.get("total_giling", ""))
-            total_hasil_vakum = st.text_input("Total hasil vakum", value=loaded_details.get("total_hasil_vakum", ""))
+            st.markdown("### 3-1. Status Giling")
+            status_giling = st.text_area(
+                "Status giling",
+                value=loaded_details.get("status_giling", ""),
+                placeholder="- 11:30 mulai giling batch 0\n- 11:50 selesai giling batch 0",
+            )
+            total_giling = st.number_input(
+                "Total Giling (resep)",
+                min_value=0,
+                step=1,
+                value=parse_optional_int(loaded_details.get("total_giling", 0), 0),
+            )
+            st.markdown("### 3-2. Status vacum")
+            status_vacum = st.text_area(
+                "Status vacum",
+                value=loaded_details.get("status_vacum", ""),
+                placeholder="12:00 mulai vacum batch 1\n12:30 selesai vacum batch 1",
+            )
+            total_hasil_vakum = st.number_input(
+                "Total hasil vakum (pack)",
+                min_value=0,
+                step=1,
+                value=parse_optional_int(loaded_details.get("total_hasil_vakum", 0), 0),
+            )
             sudah_dikirim_semua = st.selectbox(
                 "Sudah dikirim semua?",
                 options=["O", "X"],
                 index=0 if loaded_details.get("sudah_dikirim_semua", "O") == "O" else 1,
             )
-            nama_pic_cek = st.text_input("Nama PIC cek (jika belum)", value=loaded_details.get("nama_pic_cek", ""))
-            handover_sisa = st.text_area("Handover sisa barang", value=loaded_details.get("handover_sisa", ""))
+            nama_pic_cek = st.text_input("Petugas cek (jika belum dikirim semua)", value=loaded_details.get("nama_pic_cek", ""))
             catatan = st.text_area("Catatan tambahan", value=loaded_details.get("catatan", ""))
 
             details = {
@@ -867,17 +936,19 @@ def main() -> None:
                 "isi_pillow_kg": isi_pillow_kg,
                 "petugas_steril": petugas_steril,
                 "timer_ada": timer_ada,
+                "status_defrost": status_defrost,
                 "total_beku": total_beku,
                 "total_beku_kg": total_beku_kg,
                 "total_fresh_kg": total_fresh_kg,
                 "total_buang_kg": total_buang_kg,
                 "total_akhir_kg": total_akhir_kg,
                 "tempat_buang_siap": tempat_buang_siap,
+                "status_giling": status_giling,
                 "total_giling": total_giling,
+                "status_vacum": status_vacum,
                 "total_hasil_vakum": total_hasil_vakum,
                 "sudah_dikirim_semua": sudah_dikirim_semua,
                 "nama_pic_cek": nama_pic_cek,
-                "handover_sisa": handover_sisa,
                 "catatan": catatan,
                 "total_change_reason": total_change_reason,
                 "tl_confirm_phrase": tl_confirm_phrase,
