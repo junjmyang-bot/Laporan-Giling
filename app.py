@@ -619,6 +619,8 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
         errs.append("Jika 'Sudah dikirim semua' = X, petugas cek wajib diisi.")
     if not details.get("total_dikirim_packing", "").strip():
         errs.append("Total barang dikirim ke packing/press wajib diisi untuk handover.")
+    if details.get("tempat_buang_siap", "") not in {"O", "X"}:
+        errs.append("2-2 wajib dipilih O atau X pada setiap laporan.")
     return errs
 
 
@@ -639,6 +641,8 @@ def validate_steril(details: Dict[str, Any]) -> List[str]:
     )
     if abs(expected - float(details.get("total_akhir_kg", 0.0))) > 0.001:
         errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
+    if details.get("tempat_buang_siap", "") not in {"O", "X"}:
+        errs.append("2-2 wajib dipilih O atau X pada setiap laporan.")
     return errs
 
 
@@ -1061,10 +1065,15 @@ def main() -> None:
                     key="ns_tl_confirm_phrase",
                 )
             st.markdown("### 2-2. Tempat buang pillow")
+            tempat_opts = ["", "O", "X"]
+            default_tempat_non = str(loaded_details.get("tempat_buang_siap", "") or "")
+            default_idx_non = tempat_opts.index(default_tempat_non) if default_tempat_non in tempat_opts else 0
             tempat_buang_siap = st.selectbox(
                 "Tempat buang pillow sudah siap dekat meja/rak, dan sudah dikosongkan kalau sudah penuh? (O/X tiap laporan)",
-                options=["O", "X"],
-                index=0 if loaded_details.get("tempat_buang_siap", "O") == "O" else 1,
+                options=tempat_opts,
+                index=default_idx_non,
+                format_func=lambda x: "Pilih O/X" if x == "" else x,
+                key="tempat_buang_siap_non",
             )
             st.markdown("### 3-1. Status Giling")
             mode_giling = st.radio(
@@ -1232,10 +1241,15 @@ def main() -> None:
                     value=loaded_details.get("tl_confirm_phrase", ""),
                     key="st_tl_confirm_phrase",
                 )
+            tempat_opts = ["", "O", "X"]
+            default_tempat_st = str(loaded_details.get("tempat_buang_siap", "") or "")
+            default_idx_st = tempat_opts.index(default_tempat_st) if default_tempat_st in tempat_opts else 0
             tempat_buang_siap = st.selectbox(
                 "Tempat buang pillow sudah siap dekat meja/rak, dan sudah dikosongkan kalau sudah penuh? (O/X tiap laporan)",
-                options=["O", "X"],
-                index=0 if loaded_details.get("tempat_buang_siap", "O") == "O" else 1,
+                options=tempat_opts,
+                index=default_idx_st,
+                format_func=lambda x: "Pilih O/X" if x == "" else x,
+                key="tempat_buang_siap_st",
             )
             total_giling = st.text_input("Total giling", value=loaded_details.get("total_giling", ""))
             total_produk_steril = st.text_input("Total produk steril", value=loaded_details.get("total_produk_steril", ""))
@@ -1383,6 +1397,9 @@ def main() -> None:
             st.info("Submission disimpan di queue pending. Gunakan tombol Retry Pending.")
         else:
             st.session_state["active_idempotency_key"] = str(uuid.uuid4())
+            for k in ["tempat_buang_siap_non", "tempat_buang_siap_st"]:
+                if k in st.session_state:
+                    st.session_state[k] = ""
 
 
 if __name__ == "__main__":
