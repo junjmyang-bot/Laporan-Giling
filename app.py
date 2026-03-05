@@ -708,6 +708,10 @@ def main() -> None:
         st.session_state["authenticated_scope"] = ""
     if "report_type_confirmed" not in st.session_state:
         st.session_state["report_type_confirmed"] = st.session_state.get("report_type", "non_steril")
+    if "pending_report_type" not in st.session_state:
+        st.session_state["pending_report_type"] = ""
+    if "await_report_type_confirm" not in st.session_state:
+        st.session_state["await_report_type_confirm"] = False
 
     st.subheader("Kontrol Tim")
     lc1, lc2, lc3, lc4 = st.columns(4)
@@ -789,6 +793,52 @@ def main() -> None:
     if mins is not None and mins > 30:
         st.warning(f"Reminder: belum ada laporan sukses selama {mins} menit pada scope ini.")
 
+    st.subheader("Jenis Laporan Giling")
+    confirmed_type = st.session_state.get("report_type_confirmed", "non_steril")
+    if confirmed_type == "non_steril":
+        st.markdown(
+            "Mode aktif: <span style='color:#b91c1c;font-weight:800'>NON-STERIL</span> "
+            "(Barang <span style='color:#b91c1c;font-weight:800'>TIDAK</span> butuh steril)",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "Mode aktif: <span style='color:#166534;font-weight:800'>STERIL</span> "
+            "(Barang <span style='color:#166534;font-weight:800'>BUTUH</span> steril)",
+            unsafe_allow_html=True,
+        )
+
+    rt1, rt2 = st.columns(2)
+    with rt1:
+        if st.button("Pilih NON-STERIL (TIDAK butuh steril)", use_container_width=True):
+            if confirmed_type != "non_steril":
+                st.session_state["pending_report_type"] = "non_steril"
+                st.session_state["await_report_type_confirm"] = True
+    with rt2:
+        if st.button("Pilih STERIL (BUTUH steril)", use_container_width=True):
+            if confirmed_type != "steril_required":
+                st.session_state["pending_report_type"] = "steril_required"
+                st.session_state["await_report_type_confirm"] = True
+
+    if st.session_state.get("await_report_type_confirm", False):
+        pending = st.session_state.get("pending_report_type", "")
+        pending_label = "NON-STERIL (TIDAK butuh steril)" if pending == "non_steril" else "STERIL (BUTUH steril)"
+        st.warning(f"Konfirmasi ubah jenis laporan ke: {pending_label}")
+        cf1, cf2 = st.columns(2)
+        with cf1:
+            if st.button("Ya, ubah jenis laporan", use_container_width=True):
+                st.session_state["report_type_confirmed"] = pending
+                st.session_state["report_type"] = pending
+                st.session_state["loaded_details"] = {}
+                st.session_state["await_report_type_confirm"] = False
+                st.session_state["pending_report_type"] = ""
+                st.rerun()
+        with cf2:
+            if st.button("Batal", use_container_width=True):
+                st.session_state["await_report_type_confirm"] = False
+                st.session_state["pending_report_type"] = ""
+                st.rerun()
+
     loaded_details = st.session_state.get("loaded_details", {})
     with st.form("giling_form", clear_on_submit=False):
         top1, top2, top3 = st.columns(3)
@@ -817,23 +867,7 @@ def main() -> None:
         jam_kerja_selesai = f"{jam_kerja_selesai_t.hour:02d}:{jam_kerja_selesai_t.minute:02d}"
         work_date = work_date_scope
 
-        report_type = st.radio(
-            "Jenis Laporan Giling",
-            options=["non_steril", "steril_required"],
-            format_func=lambda x: "Barang tidak butuh steril" if x == "non_steril" else "Barang butuh steril",
-            index=0 if st.session_state.get("report_type", "non_steril") == "non_steril" else 1,
-            horizontal=True,
-        )
-        st.session_state["report_type"] = report_type
-        confirmed_type = st.session_state.get("report_type_confirmed", "non_steril")
-        report_type_label = "Barang tidak butuh steril" if report_type == "non_steril" else "Barang butuh steril"
-        needs_reconfirm = report_type != confirmed_type
-        confirm_report_type = st.checkbox(
-            f"Saya yakin pilih: {report_type_label}",
-            value=not needs_reconfirm,
-        )
-        if needs_reconfirm:
-            st.warning("Pilihan jenis laporan berubah. Centang konfirmasi sebelum kirim.")
+        report_type = st.session_state.get("report_type_confirmed", "non_steril")
 
         st.markdown("### 1. Produk" if report_type == "non_steril" else "### Data Umum")
         produk = st.text_input("1. Produk" if report_type == "non_steril" else "Produk", value=loaded_details.get("produk", ""))
@@ -1083,10 +1117,6 @@ def main() -> None:
     if submitted:
         common_form = {"team_id": team_id, "pelapor": pelapor, "shift": shift}
         errs = validate_common(common_form)
-        if not confirm_report_type:
-            errs.append("Konfirmasi jenis laporan wajib dicentang sebelum kirim.")
-        else:
-            st.session_state["report_type_confirmed"] = report_type
         lock_ok, lock_err = validate_lock_for_submit(
             team_id.strip(),
             str(work_date),
