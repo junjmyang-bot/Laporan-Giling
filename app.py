@@ -788,6 +788,8 @@ def main() -> None:
         st.session_state["defrost_rows_non"] = 1
     if "giling_rows_non" not in st.session_state:
         st.session_state["giling_rows_non"] = 1
+    if "vacum_rows_non" not in st.session_state:
+        st.session_state["vacum_rows_non"] = 1
 
     st.subheader("Kontrol Tim")
     lc1, lc2, lc3, lc4 = st.columns(4)
@@ -1136,16 +1138,66 @@ def main() -> None:
                 placeholder="contoh: 15",
             )
             st.markdown("### 3-2. Status vacum")
-            status_vacum = st.text_area(
-                "Status vacum",
-                value=loaded_details.get("status_vacum", ""),
-                placeholder="12:00 mulai vacum batch 1\n12:30 selesai vacum batch 1",
+            mode_vacum = st.radio(
+                "Cara isi status vacum",
+                options=["List baris", "Tulis manual"],
+                horizontal=True,
+                key="mode_vacum_non",
             )
-            total_hasil_vakum = st.number_input(
+            if mode_vacum == "List baris":
+                v1, v2, v3 = st.columns([2, 2, 6])
+                with v1:
+                    if st.button("+ Tambah baris vacum", key="btn_add_vacum", use_container_width=True):
+                        st.session_state["vacum_rows_non"] = min(20, int(st.session_state.get("vacum_rows_non", 1)) + 1)
+                        st.rerun()
+                with v2:
+                    if st.button("- Hapus baris vacum", key="btn_del_vacum", use_container_width=True):
+                        st.session_state["vacum_rows_non"] = max(1, int(st.session_state.get("vacum_rows_non", 1)) - 1)
+                        st.rerun()
+                with v3:
+                    st.caption(f"Jumlah baris vacum: {int(st.session_state.get('vacum_rows_non', 1))}")
+
+                row_count_vacum = ensure_row_count_from_session(
+                    "vacum_rows_non",
+                    ["vac_jam_non_", "vac_isi_non_", "vac_kg_non_", "vac_cat_non_"],
+                    min_rows=1,
+                    max_rows=20,
+                )
+                vacum_lines: List[str] = []
+                for idx in range(int(row_count_vacum)):
+                    vc1, vc2, vc3, vc4 = st.columns([2, 3, 2, 3])
+                    jam = vc1.text_input(f"Jam vacum #{idx+1}", placeholder="12:00", key=f"vac_jam_non_{idx}")
+                    isi = vc2.text_input(f"Status vacum #{idx+1}", placeholder="mulai vacum batch 1", key=f"vac_isi_non_{idx}")
+                    kg = vc3.text_input(f"Kg vacum #{idx+1}", placeholder="75", key=f"vac_kg_non_{idx}")
+                    cat = vc4.text_input(f"Catatan vacum #{idx+1}", placeholder="opsional", key=f"vac_cat_non_{idx}")
+                    if jam.strip() or isi.strip() or kg.strip():
+                        status_part = isi.strip()
+                        if kg.strip():
+                            status_part = f"{status_part} = {kg.strip()}kg".strip()
+                        vacum_lines.append(f"- {jam.strip()} {status_part}".strip())
+                    if cat.strip():
+                        vacum_lines.append(f"({cat.strip()})")
+                status_vacum = "\n".join(vacum_lines).strip()
+                st.caption("Preview status vacum")
+                st.code(status_vacum or "-")
+                extra_vacum = st.text_area(
+                    "Tambahan manual status vacum (opsional)",
+                    value="",
+                    key="vacum_extra_non",
+                )
+                if extra_vacum.strip():
+                    status_vacum = (status_vacum + "\n" + extra_vacum.strip()).strip()
+            else:
+                status_vacum = st.text_area(
+                    "Status vacum",
+                    value=loaded_details.get("status_vacum", ""),
+                    placeholder="12:00 mulai vacum batch 1\n12:30 selesai vacum batch 1",
+                )
+
+            total_hasil_vakum = st.text_input(
                 "Total hasil vakum (pack)",
-                min_value=0,
-                step=1,
-                value=parse_optional_int(loaded_details.get("total_hasil_vakum", 0), 0),
+                value=str(loaded_details.get("total_hasil_vakum", "")),
+                placeholder="contoh: 88",
             )
             sudah_dikirim_semua = st.selectbox(
                 "Sudah dikirim semua?",
