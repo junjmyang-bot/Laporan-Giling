@@ -726,7 +726,7 @@ def main() -> None:
     st.caption("Buka Tim: mulai laporan tim ini hari ini (PIN + kunci).")
     st.caption("Ambil Alih Tim: ambil alih saat tim terkunci operator lain.")
 
-    b1, b2, b3 = st.columns(3)
+    b1, b2 = st.columns(2)
     with b1:
         if st.button("Buka Tim"):
             if not operator_scope.strip():
@@ -759,36 +759,9 @@ def main() -> None:
                     st.error(msg)
             else:
                 st.error("PIN Tim tidak valid untuk ambil alih.")
-    with b3:
-        if st.button("Muat Konteks"):
-            saved = load_work_state(team_scope, str(work_date_scope))
-            if saved:
-                st.session_state["pelapor"] = saved.get("pelapor", operator_scope)
-                st.session_state["shift"] = saved.get("shift", "1")
-                st.session_state["report_type"] = saved.get("report_type", "non_steril")
-                st.session_state["loaded_details"] = saved.get("details", {})
-                st.info("Konteks sebelumnya berhasil dimuat.")
-            else:
-                st.info("Belum ada konteks tersimpan untuk tim ini.")
-
     if st.session_state.get("authenticated_scope") != scope:
         st.warning("Masukkan PIN lalu tekan 'Buka Tim' untuk mulai isi laporan.")
         st.stop()
-
-    st.subheader("Form Control")
-    rc1, rc2 = st.columns(2)
-    with rc1:
-        confirm_reset = st.checkbox("Confirm reset", key="confirm_reset")
-    with rc2:
-        if st.button("Reset Form (Destructive)"):
-            if confirm_reset:
-                for k in ["loaded_details", "team_id", "shift", "pelapor", "report_type"]:
-                    if k in st.session_state:
-                        del st.session_state[k]
-                st.session_state["active_idempotency_key"] = str(uuid.uuid4())
-                st.warning("Form direset.")
-            else:
-                st.error("Reset butuh centang Confirm reset.")
 
     lock_now = read_lock(team_scope, str(work_date_scope))
     if lock_now:
@@ -801,14 +774,6 @@ def main() -> None:
     mins = latest_success_minutes_ago(team_scope, str(work_date_scope))
     if mins is not None and mins > 30:
         st.warning(f"Reminder: belum ada laporan sukses selama {mins} menit pada scope ini.")
-
-    with st.expander("Status Pengiriman", expanded=False):
-        queue = load_json(PENDING_FILE, [])
-        st.write(f"Pending submission: {len(queue)}")
-        if st.button("Retry Pending Sekarang"):
-            ok_count, total = retry_pending()
-            st.info(f"Retry selesai: {ok_count}/{total} berhasil.")
-    st.caption(f"Active idempotency key: {st.session_state['active_idempotency_key']}")
 
     loaded_details = st.session_state.get("loaded_details", {})
     with st.form("giling_form", clear_on_submit=False):
