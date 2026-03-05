@@ -957,12 +957,16 @@ def main() -> None:
                 row_count = int(st.session_state.get("defrost_rows_non", 2))
                 defrost_lines: List[str] = []
                 for idx in range(int(row_count)):
-                    dc1, dc2, dc3 = st.columns([2, 4, 4])
+                    dc1, dc2, dc3, dc4 = st.columns([2, 3, 2, 3])
                     jam = dc1.text_input(f"Jam #{idx+1}", placeholder="12:55", key=f"def_jam_non_{idx}")
-                    isi = dc2.text_input(f"Status #{idx+1}", placeholder="BB fresh = 75kg", key=f"def_isi_non_{idx}")
-                    cat = dc3.text_input(f"Catatan #{idx+1}", placeholder="sudah termasuk campuran", key=f"def_cat_non_{idx}")
-                    if jam.strip() or isi.strip():
-                        defrost_lines.append(f"- {jam.strip()} {isi.strip()}".strip())
+                    isi = dc2.text_input(f"Status #{idx+1}", placeholder="BB fresh", key=f"def_isi_non_{idx}")
+                    kg = dc3.text_input(f"Kg #{idx+1}", placeholder="75", key=f"def_kg_non_{idx}")
+                    cat = dc4.text_input(f"Catatan #{idx+1}", placeholder="sudah termasuk campuran", key=f"def_cat_non_{idx}")
+                    if jam.strip() or isi.strip() or kg.strip():
+                        status_part = isi.strip()
+                        if kg.strip():
+                            status_part = f"{status_part} = {kg.strip()}kg".strip()
+                        defrost_lines.append(f"- {jam.strip()} {status_part}".strip())
                     if cat.strip():
                         defrost_lines.append(f"({cat.strip()})")
                 status_defrost = "\n".join(defrost_lines).strip()
