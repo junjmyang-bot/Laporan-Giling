@@ -303,6 +303,18 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
                 f"-> Petugas cek: {d.get('nama_pic_cek', '-') or '-'}",
             ]
         ),
+        "\n".join(
+            [
+                "4. TOTAL BARANG ADA MASALAH",
+                d.get("masalah_total_barang", "").strip() or "- Tidak ada masalah barang",
+            ]
+        ),
+        "\n".join(
+            [
+                "5. TOTAL BARANG DIKIRIM KE PACKING (ATAU PRESS)",
+                f"-> {d.get('total_dikirim_packing', '-') or '-'}",
+            ]
+        ),
         "\n".join(["CATATAN", d.get("catatan", "-") or "-"]),
     ]
 
@@ -555,6 +567,8 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
         errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
     if details.get("sudah_dikirim_semua", "") == "X" and not details.get("nama_pic_cek", "").strip():
         errs.append("Jika 'Sudah dikirim semua' = X, petugas cek wajib diisi.")
+    if not details.get("total_dikirim_packing", "").strip():
+        errs.append("Total barang dikirim ke packing/press wajib diisi untuk handover.")
     return errs
 
 
@@ -972,6 +986,18 @@ def main() -> None:
                 index=0 if loaded_details.get("sudah_dikirim_semua", "O") == "O" else 1,
             )
             nama_pic_cek = st.text_input("Petugas cek (jika belum dikirim semua)", value=loaded_details.get("nama_pic_cek", ""))
+            st.markdown("### 4. Total barang ada masalah")
+            masalah_total_barang = st.text_area(
+                "Tulis masalah barang (contoh: basi, kemasan sobek, dll)",
+                value=loaded_details.get("masalah_total_barang", ""),
+                placeholder="- Basi 2kg\n- Kemasan/pojac sobek 10 pack",
+            )
+            st.markdown("### 5. Total barang dikirim ke packing (atau press)")
+            total_dikirim_packing = st.text_input(
+                "Total barang dikirim ke packing/press",
+                value=loaded_details.get("total_dikirim_packing", ""),
+                placeholder="contoh: 120 pack ke packing",
+            )
             catatan = st.text_area("Catatan tambahan", value=loaded_details.get("catatan", ""))
 
             details = {
@@ -995,6 +1021,8 @@ def main() -> None:
                 "total_hasil_vakum": total_hasil_vakum,
                 "sudah_dikirim_semua": sudah_dikirim_semua,
                 "nama_pic_cek": nama_pic_cek,
+                "masalah_total_barang": masalah_total_barang,
+                "total_dikirim_packing": total_dikirim_packing,
                 "catatan": catatan,
                 "total_change_reason": total_change_reason,
                 "tl_confirm_phrase": tl_confirm_phrase,
