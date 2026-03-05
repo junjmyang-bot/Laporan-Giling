@@ -606,64 +606,6 @@ def set_root_message_ids(team_id: str, work_date: str, report_type: str, message
     save_json(ROOT_TRACK_FILE, data)
 
 
-def sample_non_steril() -> Dict[str, Any]:
-    return {
-        "team_id": "TL Kupas",
-        "shift": "2",
-        "pelapor": "Roswita",
-        "report_type": "non_steril",
-        "details": {
-            "produk": "Bar",
-            "alat": "Pillow bar",
-            "isi_pillow_kg": 1.635,
-            "petugas_steril": "Linda",
-            "timer_ada": "O",
-            "total_beku": "Sim km: 20 pack",
-            "total_beku_kg": 0.0,
-            "total_fresh_kg": 225.0,
-            "total_buang_kg": 0.0,
-            "total_akhir_kg": 225.0,
-            "tempat_buang_siap": "O",
-            "total_giling": "15 resep",
-            "total_hasil_vakum": "88 pack",
-            "sudah_dikirim_semua": "O",
-            "nama_pic_cek": "Lian",
-            "handover_sisa": "00 panci + 00 pack, sisa belum giling 00kg",
-            "catatan": "",
-        },
-    }
-
-
-def sample_steril() -> Dict[str, Any]:
-    return {
-        "team_id": "TL Kupas",
-        "shift": "3",
-        "pelapor": "Yuli",
-        "report_type": "steril_required",
-        "details": {
-            "produk": "Pure Ungu",
-            "alat": "Panci stainless + komitrol",
-            "rencana_steril": "1 jam 15 menit",
-            "petugas_steril": "Dayat",
-            "timer_ada": "O",
-            "isi_steril": "Defros 5kg",
-            "total_beku": "Ambil km 10 pack @3kg + ubi keras 5 pack @3kg",
-            "total_beku_kg": 45.0,
-            "total_fresh_kg": 410.0,
-            "total_buang_kg": 0.0,
-            "total_akhir_kg": 455.0,
-            "tempat_buang_siap": "O",
-            "total_giling": "Batch 1:18 panci, 2:7 panci, 3:18 panci, 4:18 panci, 5:19 panci",
-            "total_produk_steril": "80 panci",
-            "cb_siap": "O",
-            "cb_nyala": "O",
-            "ambil_20_menit": "O",
-            "tidak_ada_sisa_cb": "O",
-            "catatan": "",
-        },
-    }
-
-
 def main() -> None:
     ensure_storage()
     st.set_page_config(page_title="Laporan Giling", layout="centered")
@@ -682,7 +624,7 @@ def main() -> None:
     st.subheader("Team Control")
     lc1, lc2, lc3 = st.columns(3)
     with lc1:
-        team_scope = st.text_input("Team scope", value=st.session_state.get("team_scope", "TL Kupas"))
+        team_scope = st.text_input("Team scope", value=st.session_state.get("team_scope", ""))
     with lc2:
         work_date_scope = st.date_input("Work date scope", value=now_local().date(), key="work_date_scope")
     with lc3:
@@ -719,28 +661,11 @@ def main() -> None:
             else:
                 st.info("Belum ada context tersimpan untuk scope ini.")
 
-    st.subheader("Quick Preset")
-    p1, p2, p3 = st.columns(3)
-    with p1:
-        if st.button("Load Roswita (Non-Steril)"):
-            sample = sample_non_steril()
-            st.session_state["team_id"] = sample["team_id"]
-            st.session_state["shift"] = sample["shift"]
-            st.session_state["pelapor"] = sample["pelapor"]
-            st.session_state["report_type"] = sample["report_type"]
-            st.session_state["loaded_details"] = sample["details"]
-            st.info("Preset non-steril dimuat.")
-    with p2:
-        if st.button("Load Yuli (Steril)"):
-            sample = sample_steril()
-            st.session_state["team_id"] = sample["team_id"]
-            st.session_state["shift"] = sample["shift"]
-            st.session_state["pelapor"] = sample["pelapor"]
-            st.session_state["report_type"] = sample["report_type"]
-            st.session_state["loaded_details"] = sample["details"]
-            st.info("Preset steril dimuat.")
-    with p3:
+    st.subheader("Form Control")
+    rc1, rc2 = st.columns(2)
+    with rc1:
         confirm_reset = st.checkbox("Confirm reset", key="confirm_reset")
+    with rc2:
         if st.button("Reset Form (Destructive)"):
             if confirm_reset:
                 for k in ["loaded_details", "team_id", "shift", "pelapor", "report_type"]:
@@ -775,7 +700,7 @@ def main() -> None:
     with st.form("giling_form", clear_on_submit=False):
         c1, c2 = st.columns(2)
         with c1:
-            team_id = st.text_input("Team ID", value=st.session_state.get("team_id", "TL Kupas"))
+            team_id = st.text_input("Team ID", value=st.session_state.get("team_id", ""))
             default_shift = st.session_state.get("shift", "1")
             shift_options = ["1", "2", "3"]
             shift_index = shift_options.index(default_shift) if default_shift in shift_options else 0

@@ -16,7 +16,6 @@ Single-entry `Laporan Giling` app with dynamic form branching:
 - Work-state persistence by `(team_id + work_date)` and quick context reload.
 - 30-minute anti-miss reminder from latest successful report.
 - Destructive reset requires explicit confirmation.
-- Preset loaders for sample `non-steril` and `steril-required` reports.
 
 ## Run
 ```powershell
