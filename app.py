@@ -326,13 +326,21 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
                 "3-1. STATUS GILING",
                 status_giling,
                 f"--> Total Giling: {d.get('total_giling', '-') or '-'} resep",
+                f"-> Ada barang siap giling kena delay lama?: {d.get('giling_delay_lama', '-') or '-'}",
+                f"-> Detail delay giling: {d.get('giling_delay_detail', '-') or '-'}",
             ]
         ),
         "\n".join(
             [
                 "3-2. STATUS VACUM",
                 status_vacum,
-                f"-> Total hasil vakum: {d.get('total_hasil_vakum', '-') or '-'} pack",
+                f"-> Total vakum diproses: {d.get('total_hasil_vakum', '-') or '-'} pack",
+                f"-> Total vakum bermasalah: {d.get('total_vacum_defect_pack', '-') or '-'} pack",
+                f"-> Jenis defect vacum/pillow: {d.get('jenis_defect_vacum', '-') or '-'}",
+                f"-> Antrian vacum terlalu lama?: {d.get('vacum_antrian_lama', '-') or '-'}",
+                f"-> Detail antrian vacum: {d.get('vacum_antrian_detail', '-') or '-'}",
+                f"-> Mesin vacum sudah cukup istirahat?: {d.get('mesin_vacum_istirahat', '-') or '-'}",
+                f"-> Detail kondisi mesin vacum: {d.get('mesin_vacum_istirahat_detail', '-') or '-'}",
                 f"-> Sudah dikirim semua?: {d.get('sudah_dikirim_semua', '-') or '-'}",
                 f"-> Petugas cek: {d.get('nama_pic_cek', '-') or '-'}",
             ]
@@ -621,6 +629,33 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
         errs.append("Total barang dikirim ke packing/press wajib diisi untuk handover.")
     if details.get("tempat_buang_siap", "") not in {"O", "X"}:
         errs.append("2-2 wajib dipilih O atau X pada setiap laporan.")
+    if details.get("giling_delay_lama", "") not in {"O", "X"}:
+        errs.append("Status delay giling wajib dipilih O atau X.")
+    if details.get("giling_delay_lama", "") == "O" and not details.get("giling_delay_detail", "").strip():
+        errs.append("Jika ada delay giling lama (O), detail delay wajib diisi.")
+
+    total_vacum = parse_optional_float(details.get("total_hasil_vakum"))
+    total_vacum_defect = parse_optional_float(details.get("total_vacum_defect_pack"))
+    if total_vacum is None:
+        errs.append("Total vakum diproses (pack) wajib diisi angka.")
+    if total_vacum_defect is None:
+        errs.append("Total vakum bermasalah (pack) wajib diisi angka.")
+    if total_vacum is not None and total_vacum_defect is not None:
+        if total_vacum < 0 or total_vacum_defect < 0:
+            errs.append("Nilai total vacum tidak boleh negatif.")
+        if total_vacum_defect > total_vacum:
+            errs.append("Total vacum bermasalah tidak boleh lebih besar dari total vacum diproses.")
+        if total_vacum_defect > 0 and not details.get("jenis_defect_vacum", "").strip():
+            errs.append("Jika ada vacum bermasalah, jenis defect wajib diisi.")
+
+    if details.get("vacum_antrian_lama", "") not in {"O", "X"}:
+        errs.append("Status antrian vacum wajib dipilih O atau X.")
+    if details.get("vacum_antrian_lama", "") == "O" and not details.get("vacum_antrian_detail", "").strip():
+        errs.append("Jika antrian vacum lama (O), detail antrian wajib diisi.")
+    if details.get("mesin_vacum_istirahat", "") not in {"O", "X"}:
+        errs.append("Status mesin vacum istirahat wajib dipilih O atau X.")
+    if details.get("mesin_vacum_istirahat", "") == "X" and not details.get("mesin_vacum_istirahat_detail", "").strip():
+        errs.append("Jika mesin vacum belum cukup istirahat (X), detail kondisi wajib diisi.")
     return errs
 
 
@@ -1137,6 +1172,18 @@ def main() -> None:
                 value=str(loaded_details.get("total_giling", "")),
                 placeholder="contoh: 15",
             )
+            giling_delay_lama = st.selectbox(
+                "Ada barang sudah siap giling tapi kena delay lama tidak?",
+                options=["", "O", "X"],
+                format_func=lambda x: "Pilih O/X" if x == "" else x,
+                index=["", "O", "X"].index(str(loaded_details.get("giling_delay_lama", "") or "")),
+                key="giling_delay_lama_non",
+            )
+            giling_delay_detail = st.text_area(
+                "Detail delay giling (isi jika O)",
+                value=loaded_details.get("giling_delay_detail", ""),
+                placeholder="contoh: siap giling tapi delay 40 menit karena antrian packing",
+            )
             st.markdown("### 3-2. Status vacum")
             mode_vacum = st.radio(
                 "Cara isi status vacum",
@@ -1195,9 +1242,43 @@ def main() -> None:
                 )
 
             total_hasil_vakum = st.text_input(
-                "Total hasil vakum (pack)",
+                "Total vakum diproses (pack)",
                 value=str(loaded_details.get("total_hasil_vakum", "")),
                 placeholder="contoh: 88",
+            )
+            total_vacum_defect_pack = st.text_input(
+                "Total vacum bermasalah (pack)",
+                value=str(loaded_details.get("total_vacum_defect_pack", "")),
+                placeholder="contoh: 4",
+            )
+            jenis_defect_vacum = st.text_area(
+                "Jenis defect vacum/pillow (isi jika ada masalah)",
+                value=loaded_details.get("jenis_defect_vacum", ""),
+                placeholder="contoh: 2 pack pecah, 2 pack seal bocor",
+            )
+            vacum_antrian_lama = st.selectbox(
+                "Antrian vacum terlalu lama?",
+                options=["", "O", "X"],
+                format_func=lambda x: "Pilih O/X" if x == "" else x,
+                index=["", "O", "X"].index(str(loaded_details.get("vacum_antrian_lama", "") or "")),
+                key="vacum_antrian_lama_non",
+            )
+            vacum_antrian_detail = st.text_area(
+                "Detail antrian vacum (isi jika O)",
+                value=loaded_details.get("vacum_antrian_detail", ""),
+                placeholder="contoh: tunggu 30 menit sebelum proses batch berikutnya",
+            )
+            mesin_vacum_istirahat = st.selectbox(
+                "Mesin vacum sudah cukup istirahat?",
+                options=["", "O", "X"],
+                format_func=lambda x: "Pilih O/X" if x == "" else x,
+                index=["", "O", "X"].index(str(loaded_details.get("mesin_vacum_istirahat", "") or "")),
+                key="mesin_vacum_istirahat_non",
+            )
+            mesin_vacum_istirahat_detail = st.text_area(
+                "Detail kondisi mesin vacum (isi jika X)",
+                value=loaded_details.get("mesin_vacum_istirahat_detail", ""),
+                placeholder="contoh: mesin panas, perlu jeda 10 menit",
             )
             sudah_dikirim_semua = st.selectbox(
                 "Sudah dikirim semua?",
@@ -1238,8 +1319,16 @@ def main() -> None:
                 "tempat_buang_siap": tempat_buang_siap,
                 "status_giling": status_giling,
                 "total_giling": total_giling,
+                "giling_delay_lama": giling_delay_lama,
+                "giling_delay_detail": giling_delay_detail,
                 "status_vacum": status_vacum,
                 "total_hasil_vakum": total_hasil_vakum,
+                "total_vacum_defect_pack": total_vacum_defect_pack,
+                "jenis_defect_vacum": jenis_defect_vacum,
+                "vacum_antrian_lama": vacum_antrian_lama,
+                "vacum_antrian_detail": vacum_antrian_detail,
+                "mesin_vacum_istirahat": mesin_vacum_istirahat,
+                "mesin_vacum_istirahat_detail": mesin_vacum_istirahat_detail,
                 "sudah_dikirim_semua": sudah_dikirim_semua,
                 "nama_pic_cek": nama_pic_cek,
                 "masalah_total_barang": masalah_total_barang,
