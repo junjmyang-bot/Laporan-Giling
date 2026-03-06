@@ -1955,10 +1955,11 @@ def main() -> None:
                 for idx in range(int(row_count_giling)):
                     gc1, gc2, gc3, gc4 = st.columns([2, 3, 2, 3])
                     jam = gc1.text_input(f"Jam giling #{idx+1}", placeholder="11:30", key=f"gil_jam_non_{idx}")
+                    giling_status_key = f"gil_isi_non_{idx}"
                     isi = gc2.text_input(
                         f"Status giling #{idx+1}",
                         placeholder="1 / 2 / manual",
-                        key=f"gil_isi_non_{idx}",
+                        key=giling_status_key,
                     )
                     resep = gc3.text_input(f"Resep giling #{idx+1}", placeholder="75", key=f"gil_kg_non_{idx}")
                     cat = gc4.text_input(f"Catatan giling #{idx+1}", placeholder="opsional", key=f"gil_cat_non_{idx}")
@@ -1969,6 +1970,8 @@ def main() -> None:
                     )
                     if isi.strip() and status_text and status_text != isi.strip():
                         gc2.caption(f"Otomatis: {status_text}")
+                        if str(st.session_state.get(giling_status_key, "")).strip() != status_text:
+                            st.session_state[giling_status_key] = status_text
                     resep_val = parse_optional_float(resep)
                     if resep.strip():
                         if resep_val is None:
@@ -2931,7 +2934,8 @@ def main() -> None:
                 for idx in range(int(row_count_giling_st)):
                     gc1, gc2, gc3, gc4 = st.columns([2, 3, 2, 3])
                     jam = gc1.text_input("Jam giling", placeholder="20:30", key=f"gil_jam_st_{idx}")
-                    isi = gc2.text_input("Status giling", placeholder="1 / 2 / manual", key=f"gil_isi_st_{idx}")
+                    giling_status_key_st = f"gil_isi_st_{idx}"
+                    isi = gc2.text_input("Status giling", placeholder="1 / 2 / manual", key=giling_status_key_st)
                     resep = gc3.text_input("Resep giling", placeholder="18", key=f"gil_kg_st_{idx}")
                     cat = gc4.text_input("Catatan giling", placeholder="opsional", key=f"gil_cat_st_{idx}")
                     status_text, giling_next_batch_st, giling_open_batch_st = normalize_giling_status_input(
@@ -2941,6 +2945,8 @@ def main() -> None:
                     )
                     if isi.strip() and status_text and status_text != isi.strip():
                         gc2.caption(f"Otomatis: {status_text}")
+                        if str(st.session_state.get(giling_status_key_st, "")).strip() != status_text:
+                            st.session_state[giling_status_key_st] = status_text
                     resep_val = parse_optional_float(resep)
                     if resep.strip():
                         if resep_val is None:
