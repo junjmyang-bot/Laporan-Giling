@@ -4,6 +4,7 @@ import secrets
 import uuid
 import ast
 import mimetypes
+import re
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -237,6 +238,9 @@ def format_float_compact(value: float) -> str:
 def parse_hhmm_time(value: Any, default_hhmm: str) -> time:
     raw = str(value or "").strip()
     if raw:
+        normalized = normalize_hhmm_loose(raw)
+        if normalized:
+            raw = normalized
         try:
             return datetime.strptime(raw, "%H:%M").time()
         except Exception:
@@ -244,19 +248,46 @@ def parse_hhmm_time(value: Any, default_hhmm: str) -> time:
     return datetime.strptime(default_hhmm, "%H:%M").time()
 
 
-def is_valid_hhmm(value: Any) -> bool:
+def normalize_hhmm_loose(value: Any) -> str:
     raw = str(value or "").strip()
     if not raw:
-        return False
-    try:
-        datetime.strptime(raw, "%H:%M")
-        return True
-    except Exception:
-        return False
+        return ""
+    raw = raw.replace(".", ":")
+    if ":" in raw:
+        parts = raw.split(":")
+        if len(parts) != 2:
+            return ""
+        hh_raw, mm_raw = parts[0].strip(), parts[1].strip()
+        if not hh_raw.isdigit() or not mm_raw.isdigit():
+            return ""
+        hh = int(hh_raw)
+        mm = int(mm_raw)
+    else:
+        digits = "".join(ch for ch in raw if ch.isdigit())
+        if not digits:
+            return ""
+        if len(digits) <= 2:
+            hh = int(digits)
+            mm = 0
+        elif len(digits) == 3:
+            hh = int(digits[:1])
+            mm = int(digits[1:])
+        elif len(digits) == 4:
+            hh = int(digits[:2])
+            mm = int(digits[2:])
+        else:
+            return ""
+    if hh < 0 or hh > 23 or mm < 0 or mm > 59:
+        return ""
+    return f"{hh:02d}:{mm:02d}"
+
+
+def is_valid_hhmm(value: Any) -> bool:
+    return bool(normalize_hhmm_loose(value))
 
 
 def hhmm_plus_minutes(value: Any, minutes: int) -> str:
-    raw = str(value or "").strip()
+    raw = normalize_hhmm_loose(value)
     if not raw:
         return ""
     try:
@@ -268,8 +299,8 @@ def hhmm_plus_minutes(value: Any, minutes: int) -> str:
 
 
 def minutes_diff_hhmm(start_hhmm: Any, end_hhmm: Any) -> Optional[int]:
-    start_raw = str(start_hhmm or "").strip()
-    end_raw = str(end_hhmm or "").strip()
+    start_raw = normalize_hhmm_loose(start_hhmm)
+    end_raw = normalize_hhmm_loose(end_hhmm)
     if not start_raw or not end_raw:
         return None
     try:
@@ -1185,12 +1216,12 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
             if status not in {"O", "X"}:
                 errs.append(f"2-2 log {idx}: status wajib O atau X.")
             if not is_valid_hhmm(jam):
-                errs.append(f"2-2 log {idx}: jam wajib format HH:MM.")
+                errs.append(f"2-2 log {idx}: jam wajib diisi (contoh 1000 atau 10:00).")
     else:
         if details.get("tempat_buang_siap", "") not in {"O", "X"}:
             errs.append("2-2 wajib dipilih O atau X pada setiap laporan.")
         if not is_valid_hhmm(details.get("tempat_buang_check_time", "")):
-            errs.append("2-2 jam cek wajib diisi format HH:MM.")
+            errs.append("2-2 jam cek wajib diisi (contoh 1000 atau 10:00).")
     giling_delay_rows = details.get("giling_delay_rows", [])
     active_delay_rows: List[Dict[str, Any]] = []
     if isinstance(giling_delay_rows, list):
@@ -1343,12 +1374,12 @@ def validate_steril(details: Dict[str, Any]) -> List[str]:
             if status not in {"O", "X"}:
                 errs.append(f"2-2 log {idx}: status wajib O atau X.")
             if not is_valid_hhmm(jam):
-                errs.append(f"2-2 log {idx}: jam wajib format HH:MM.")
+                errs.append(f"2-2 log {idx}: jam wajib diisi (contoh 1000 atau 10:00).")
     else:
         if details.get("tempat_buang_siap", "") not in {"O", "X"}:
             errs.append("2-2 wajib dipilih O atau X pada setiap laporan.")
         if not is_valid_hhmm(details.get("tempat_buang_check_time", "")):
-            errs.append("2-2 jam cek wajib diisi format HH:MM.")
+            errs.append("2-2 jam cek wajib diisi (contoh 1000 atau 10:00).")
     if not str(details.get("status_defrost", "")).strip():
         errs.append("2-1 Status defrost wajib diisi.")
     if not str(details.get("status_giling", "")).strip():
@@ -1377,7 +1408,7 @@ def validate_steril(details: Dict[str, Any]) -> List[str]:
             batch = str(row.get("batch", "")).strip()
             panci_raw = str(row.get("panci", "")).strip()
             if not is_valid_hhmm(jam):
-                errs.append(f"3-2 log steril {idx}: jam wajib format HH:MM.")
+                errs.append(f"3-2 log steril {idx}: jam wajib diisi (contoh 1000 atau 10:00).")
             if not batch:
                 errs.append(f"3-2 log steril {idx}: batch wajib diisi.")
             panci_val = parse_optional_float(panci_raw)
@@ -1405,7 +1436,7 @@ def validate_steril(details: Dict[str, Any]) -> List[str]:
             if not batch:
                 errs.append(f"3-2-1 log cek {idx}: batch wajib diisi.")
             if not is_valid_hhmm(jam_actual):
-                errs.append(f"3-2-1 log cek {idx}: jam aktual wajib format HH:MM.")
+                errs.append(f"3-2-1 log cek {idx}: jam aktual wajib diisi (contoh 1000 atau 10:00).")
             start_jam = steril_start_by_batch.get(batch, "")
             if start_jam and is_valid_hhmm(jam_actual):
                 diff = minutes_diff_hhmm(start_jam, jam_actual)
@@ -1460,7 +1491,7 @@ def validate_steril(details: Dict[str, Any]) -> List[str]:
             batch = str(row.get("batch", "")).strip()
             panci_raw = str(row.get("panci", "")).strip()
             if not is_valid_hhmm(jam):
-                errs.append(f"3-3 log CB {idx}: jam wajib format HH:MM.")
+                errs.append(f"3-3 log CB {idx}: jam wajib diisi (contoh 1000 atau 10:00).")
             if not batch:
                 errs.append(f"3-3 log CB {idx}: batch wajib diisi.")
             panci_val = parse_optional_float(panci_raw)
@@ -3821,6 +3852,12 @@ def main() -> None:
             if result.telegram_message_ids:
                 st.caption(f"Message IDs: {', '.join([str(x) for x in result.telegram_message_ids])}")
                 set_root_message_ids(team_id.strip(), str(work_date), report_type, result.telegram_message_ids)
+                edited_parts = 0
+                for i, mid in enumerate(result.telegram_message_ids):
+                    if i < len(existing_ids) and mid == existing_ids[i]:
+                        edited_parts += 1
+                if edited_parts > 0:
+                    st.info("Update laporan mengedit pesan Telegram sebelumnya (ID sama), jadi tidak muncul bubble pesan baru.")
         else:
             st.error(f"Telegram gagal: {result.telegram_error}. Tersimpan sebagai pending untuk retry.")
 
