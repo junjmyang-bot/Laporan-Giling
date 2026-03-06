@@ -1891,6 +1891,25 @@ def main() -> None:
             )
             defrost_total_pack_auto = str(loaded_details.get("defrost_total_pack_auto", ""))
             if mode_defrost == "List baris":
+                loaded_defrost_rows_non = loaded_details.get("defrost_rows", [])
+                if isinstance(loaded_defrost_rows_non, list) and loaded_defrost_rows_non:
+                    existing_defrost_local = False
+                    for i in range(20):
+                        if str(st.session_state.get(f"def_jam_non_{i}", "")).strip() or str(
+                            st.session_state.get(f"def_isi_non_{i}", "")
+                        ).strip() or str(st.session_state.get(f"def_kg_non_{i}", "")).strip() or str(
+                            st.session_state.get(f"def_cat_non_{i}", "")
+                        ).strip():
+                            existing_defrost_local = True
+                            break
+                    if not existing_defrost_local:
+                        st.session_state["defrost_rows_non"] = min(20, max(1, len(loaded_defrost_rows_non)))
+                        for idx, row in enumerate(loaded_defrost_rows_non[:20]):
+                            st.session_state[f"def_no_non_{idx}"] = str(row.get("no", idx + 1))
+                            st.session_state[f"def_jam_non_{idx}"] = str(row.get("jam", ""))
+                            st.session_state[f"def_isi_non_{idx}"] = str(row.get("status", ""))
+                            st.session_state[f"def_kg_non_{idx}"] = str(row.get("pack", ""))
+                            st.session_state[f"def_cat_non_{idx}"] = str(row.get("catatan", ""))
                 d1, d2, d3 = st.columns([2, 2, 6])
                 with d1:
                     if st.button("+ Tambah", key="btn_add_defrost"):
@@ -1914,6 +1933,7 @@ def main() -> None:
                     max_rows=20,
                 )
                 defrost_lines: List[str] = []
+                defrost_rows: List[Dict[str, Any]] = []
                 defrost_pack_sum = 0.0
                 defrost_pack_invalid = 0
                 for idx in range(int(row_count)):
@@ -1933,6 +1953,7 @@ def main() -> None:
                         elif pack_val >= 0:
                             defrost_pack_sum += pack_val
                     if jam.strip() or isi.strip() or pack.strip():
+                        defrost_rows.append({"no": no, "jam": jam, "status": isi, "pack": pack, "catatan": cat})
                         status_part = isi.strip()
                         if pack.strip():
                             status_part = f"{status_part} = {pack.strip()}pack".strip()
@@ -1955,6 +1976,7 @@ def main() -> None:
                 if extra_manual.strip():
                     status_defrost = (status_defrost + "\n" + extra_manual.strip()).strip()
             else:
+                defrost_rows = []
                 status_defrost = st.text_area(
                     "Status defrost (Kalau sudah habis dipakai, tulis habis)",
                     value=loaded_details.get("status_defrost", ""),
@@ -2258,8 +2280,6 @@ def main() -> None:
                     )
                     if isi.strip() and status_text and status_text != isi.strip():
                         gc2.caption(f"Otomatis: {status_text}")
-                        if str(st.session_state.get(giling_status_key, "")).strip() != status_text:
-                            st.session_state[giling_status_key] = status_text
                     resep_val = parse_optional_float(resep)
                     if resep.strip():
                         if resep_val is None:
@@ -2980,6 +3000,7 @@ def main() -> None:
                 "jam_kerja_mulai": jam_kerja_mulai,
                 "jam_kerja_selesai": jam_kerja_selesai,
                 "status_defrost": status_defrost,
+                "defrost_rows": defrost_rows,
                 "defrost_total_pack_auto": defrost_total_pack_auto,
                 "total_beku": total_beku,
                 "total_beku_kg": total_beku_kg,
@@ -3057,6 +3078,25 @@ def main() -> None:
             )
             defrost_total_pack_auto = str(loaded_details.get("defrost_total_pack_auto", ""))
             if mode_defrost_st == "List baris":
+                loaded_defrost_rows_st = loaded_details.get("defrost_rows", [])
+                if isinstance(loaded_defrost_rows_st, list) and loaded_defrost_rows_st:
+                    existing_defrost_local_st = False
+                    for i in range(20):
+                        if str(st.session_state.get(f"def_jam_st_{i}", "")).strip() or str(
+                            st.session_state.get(f"def_isi_st_{i}", "")
+                        ).strip() or str(st.session_state.get(f"def_kg_st_{i}", "")).strip() or str(
+                            st.session_state.get(f"def_cat_st_{i}", "")
+                        ).strip():
+                            existing_defrost_local_st = True
+                            break
+                    if not existing_defrost_local_st:
+                        st.session_state["defrost_rows_st"] = min(20, max(1, len(loaded_defrost_rows_st)))
+                        for idx, row in enumerate(loaded_defrost_rows_st[:20]):
+                            st.session_state[f"def_no_st_{idx}"] = str(row.get("no", idx + 1))
+                            st.session_state[f"def_jam_st_{idx}"] = str(row.get("jam", ""))
+                            st.session_state[f"def_isi_st_{idx}"] = str(row.get("status", ""))
+                            st.session_state[f"def_kg_st_{idx}"] = str(row.get("pack", ""))
+                            st.session_state[f"def_cat_st_{idx}"] = str(row.get("catatan", ""))
                 d1, d2, d3 = st.columns([2, 2, 6])
                 with d1:
                     if st.button("+ Tambah", key="btn_add_defrost_st"):
@@ -3080,10 +3120,15 @@ def main() -> None:
                     max_rows=20,
                 )
                 defrost_lines: List[str] = []
+                defrost_rows: List[Dict[str, Any]] = []
                 defrost_pack_sum = 0.0
                 defrost_pack_invalid = 0
                 for idx in range(int(row_count)):
-                    dc1, dc2, dc3, dc4 = st.columns([2, 3, 2, 3])
+                    dc0, dc1, dc2, dc3, dc4 = st.columns([1, 2, 3, 2, 3])
+                    no_key = f"def_no_st_{idx}"
+                    if not str(st.session_state.get(no_key, "")).strip():
+                        st.session_state[no_key] = str(idx + 1)
+                    no = dc0.text_input("No", key=no_key, max_chars=3)
                     jam = dc1.text_input("Jam", placeholder="12:55", key=f"def_jam_st_{idx}")
                     isi = dc2.text_input("Status", placeholder="BB fresh", key=f"def_isi_st_{idx}")
                     pack = dc3.text_input("Pack", placeholder="75", key=f"def_kg_st_{idx}")
@@ -3095,10 +3140,12 @@ def main() -> None:
                         elif pack_val >= 0:
                             defrost_pack_sum += pack_val
                     if jam.strip() or isi.strip() or pack.strip():
+                        defrost_rows.append({"no": no, "jam": jam, "status": isi, "pack": pack, "catatan": cat})
                         status_part = isi.strip()
                         if pack.strip():
                             status_part = f"{status_part} = {pack.strip()}pack".strip()
-                        defrost_lines.append(f"- {jam.strip()} {status_part}".strip())
+                        prefix = f"[{no.strip()}] " if no.strip() else ""
+                        defrost_lines.append(f"- {prefix}{jam.strip()} {status_part}".strip())
                     if cat.strip():
                         defrost_lines.append(f"({cat.strip()})")
                 status_defrost = "\n".join(defrost_lines).strip()
@@ -3112,6 +3159,7 @@ def main() -> None:
                 if extra_manual_st.strip():
                     status_defrost = (status_defrost + "\n" + extra_manual_st.strip()).strip()
             else:
+                defrost_rows = []
                 status_defrost = st.text_area(
                     "Status defrost (Kalau sudah habis dipakai, tulis habis)",
                     value=loaded_details.get("status_defrost", ""),
@@ -3296,8 +3344,6 @@ def main() -> None:
                     )
                     if isi.strip() and status_text and status_text != isi.strip():
                         gc2.caption(f"Otomatis: {status_text}")
-                        if str(st.session_state.get(giling_status_key_st, "")).strip() != status_text:
-                            st.session_state[giling_status_key_st] = status_text
                     resep_val = parse_optional_float(resep)
                     if resep.strip():
                         if resep_val is None:
@@ -3659,6 +3705,7 @@ def main() -> None:
                 "jam_kerja_selesai": jam_kerja_selesai,
                 "isi_steril": isi_steril,
                 "status_defrost": status_defrost,
+                "defrost_rows": defrost_rows,
                 "defrost_total_pack_auto": defrost_total_pack_auto,
                 "total_beku": total_beku,
                 "total_beku_kg": total_beku_kg,
