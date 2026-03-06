@@ -639,322 +639,336 @@ class SubmitResult:
     sheets_error: str
 
 
+def _v(value: Any, default: str = "-") -> str:
+    s = str(value or "").strip()
+    return s if s else default
+
+
+def _is_placeholder(value: Any) -> bool:
+    s = str(value or "").strip().lower()
+    return s in {"", "-", "x", "0", "0.0", "pilih"}
+
+
+def _fmt_date_short(date_text: Any) -> str:
+    raw = str(date_text or "").strip()
+    if not raw:
+        return "-"
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").strftime("%d-%m-%y")
+    except Exception:
+        return raw
+
+
+def _fmt_jam(text: Any) -> str:
+    raw = str(text or "").strip()
+    norm = normalize_hhmm_loose(raw)
+    return norm if norm else raw
+
+
+def _clean_text_lines(text: Any) -> List[str]:
+    lines: List[str] = []
+    for raw in str(text or "").splitlines():
+        line = str(raw).strip()
+        if not line:
+            continue
+        line = re.sub(r"^\s*-\s*\[\d+\]\s*", "- ", line)
+        if line in {"-", "- -"}:
+            continue
+        lines.append(line)
+    return lines
+
+
+def _defrost_lines(details: Dict[str, Any]) -> List[str]:
+    rows = details.get("defrost_rows", [])
+    out: List[str] = []
+    if isinstance(rows, list):
+        for row in rows:
+            jam = _fmt_jam(row.get("jam", ""))
+            status = str(row.get("status", "")).strip()
+            pack = str(row.get("pack", "")).strip()
+            cat = str(row.get("catatan", "")).strip()
+            if jam or status or pack:
+                line = f"- {jam} {status}".strip()
+                if pack:
+                    line = f"{line} = {pack}pack"
+                out.append(line)
+            if cat and not _is_placeholder(cat):
+                out.append(f"({cat})")
+    return out or _clean_text_lines(details.get("status_defrost", "")) or ["-"]
+
+
+def _tempat_buang_lines(details: Dict[str, Any]) -> List[str]:
+    rows = details.get("tempat_buang_rows", [])
+    if isinstance(rows, list) and rows:
+        latest_status = ""
+        latest_jam = ""
+        logs: List[str] = []
+        for row in rows:
+            jam = _fmt_jam(row.get("jam", ""))
+            status = str(row.get("status", "")).strip()
+            cat = str(row.get("catatan", "")).strip()
+            if status in {"O", "X"}:
+                latest_status = status
+                latest_jam = jam
+            if jam or status or (cat and not _is_placeholder(cat)):
+                line = f"- {jam} | {status or '-'}".strip()
+                if cat and not _is_placeholder(cat):
+                    line += f" | {cat}"
+                logs.append(line)
+        head = f"-> {latest_status or '-'}"
+        if latest_jam:
+            head += f" ({latest_jam})"
+        if len(logs) > 1:
+            return [head, "-> Log cek:", *logs]
+        return [head]
+    status = _v(details.get("tempat_buang_siap"))
+    jam = _fmt_jam(details.get("tempat_buang_check_time", ""))
+    return [f"-> {status}{f' ({jam})' if jam else ''}"]
+
+
 def render_header_block(payload: Dict[str, Any]) -> str:
+    pelapor = normalize_name(payload.get("pelapor", "")) or "-"
+    work_date_short = _fmt_date_short(payload.get("work_date", ""))
+    if payload.get("report_type") == "non_steril":
+        title = "Laporan Giling - Barang yang tidak butuh steril"
+    else:
+        title = "Laporan Giling / Steril - Barang yang butuh steril"
     return "\n".join(
         [
-            f"LAPORAN GILING ({payload['report_type_label']})",
-            f"Team: {payload['team_id']} | Shift: {payload['shift']}",
-            f"Pelapor: {normalize_name(payload['pelapor'])}",
-            f"Tanggal kerja: {payload['work_date']}",
-            f"Waktu sistem: {payload['system_timestamp']}",
+            title,
+            f"({work_date_short} / {pelapor})",
+            "Durasi Laporan : 1 kali / 30 menit",
+            f"Team: {payload.get('team_id', '-')} | Shift: {payload.get('shift', '-')}",
+            f"Waktu sistem: {payload.get('system_timestamp', '-')}",
         ]
     )
 
 
 def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
     d = payload["details"]
-    status_defrost = str(d.get("status_defrost", "")).strip() or "-"
-    status_giling = str(d.get("status_giling", "")).strip() or "-"
-    status_vacum = str(d.get("status_vacum", "")).strip() or "-"
     nama_petugas = d.get("nama_petugas_list", [])
-    nama_petugas_txt = ", ".join([str(x) for x in nama_petugas if str(x).strip()]) or "-"
+    nama_petugas_txt = ", ".join([str(x).strip() for x in nama_petugas if str(x).strip()]) or "-"
+
+    giling_lines = _clean_text_lines(d.get("status_giling", ""))
+    vacum_lines = _clean_text_lines(d.get("status_vacum", ""))
+    defrost_lines = _defrost_lines(d)
+    tempat_buang = _tempat_buang_lines(d)
+
+    delay_rows = d.get("giling_delay_rows", [])
+    delay_lines: List[str] = []
+    if isinstance(delay_rows, list):
+        for row in delay_rows:
+            jam = _fmt_jam(row.get("jam", ""))
+            status = str(row.get("status", "")).strip()
+            detail = str(row.get("detail", "")).strip()
+            if status == "O":
+                delay_lines.append(f"- {jam or '-'} | Delay ada | {detail or '-'}")
+    if not delay_lines and str(d.get("giling_delay_lama", "")).strip() == "O":
+        detail = str(d.get("giling_delay_detail", "")).strip()
+        if detail:
+            delay_lines = _clean_text_lines(detail)
+
+    vac_ops_rows = d.get("vacum_ops_rows", [])
+    vac_ops_lines: List[str] = []
+    if isinstance(vac_ops_rows, list):
+        for row in vac_ops_rows:
+            start = _fmt_jam(row.get("stop_start", row.get("jam", "")))
+            end = _fmt_jam(row.get("stop_end", ""))
+            mesin = str(row.get("mesin_status", "")).strip()
+            mesin_detail = str(row.get("mesin_detail", "")).strip()
+            antrian = str(row.get("antrian_status", "")).strip()
+            antrian_detail = str(row.get("antrian_detail", "")).strip()
+            kirim = str(row.get("kirim_status", "")).strip()
+            pic = str(row.get("pic_cek", "")).strip()
+            if mesin == "O":
+                span = f"{start or '-'}-{end or '-'}"
+                vac_ops_lines.append(f"- Mesin stop/istirahat {span} | {mesin_detail or '-'}")
+            if antrian == "O":
+                vac_ops_lines.append(f"- Antrian lama {start or '-'} | {antrian_detail or '-'}")
+            if kirim == "X":
+                vac_ops_lines.append(f"- Belum dikirim semua {start or '-'} | PIC cek: {pic or '-'}")
 
     handover_rows = d.get("handover_rows", [])
     handover_lines: List[str] = []
-    for idx, row in enumerate(handover_rows, start=1):
-        jam = str(row.get("jam", "")).strip() or "-"
-        kirim = str(row.get("kirim_pack", "")).strip() or "-"
-        terima = str(row.get("terima_pack", "")).strip() or "-"
-        selisih = str(row.get("selisih_pack", "")).strip() or "-"
-        tl_packing = str(row.get("tl_packing", "")).strip() or "-"
-        tl_kupas = str(row.get("tl_kupas", row.get("pic_packing", ""))).strip() or "-"
-        alasan = str(row.get("alasan_selisih", "")).strip()
-        line = (
-            f"- [{idx}] {jam} | kirim {kirim} | terima {terima} | selisih {selisih} | "
-            f"TL Kupas {tl_kupas} | TL Packing {tl_packing}"
-        )
-        if alasan:
-            line += f" | alasan: {alasan}"
-        handover_lines.append(line)
-    if not handover_lines:
-        handover_lines = ["- Tidak ada baris handover"]
+    if isinstance(handover_rows, list):
+        for row in handover_rows:
+            jam = _fmt_jam(row.get("jam", ""))
+            kirim = _v(row.get("kirim_pack"))
+            terima = _v(row.get("terima_pack"))
+            tl_kupas = _v(row.get("tl_kupas", row.get("pic_packing", "")))
+            tl_packing = _v(row.get("tl_packing"))
+            selisih = str(row.get("selisih_pack", "")).strip()
+            alasan = str(row.get("alasan_selisih", "")).strip()
+            line = f"- {jam or '-'} | kirim {kirim} | terima {terima} | TL Kupas {tl_kupas} | TL Packing {tl_packing}"
+            if selisih and not _is_placeholder(selisih) and abs(parse_optional_float(selisih) or 0.0) > 0.001:
+                line += f" | selisih {selisih}"
+            if alasan and not _is_placeholder(alasan):
+                line += f" | alasan: {alasan}"
+            handover_lines.append(line)
 
-    giling_delay_rows = d.get("giling_delay_rows", [])
-    giling_delay_lines: List[str] = []
-    for idx, row in enumerate(giling_delay_rows, start=1):
-        jam = str(row.get("jam", "")).strip() or "-"
-        status = str(row.get("status", "")).strip() or "-"
-        detail = str(row.get("detail", "")).strip() or "-"
-        status_label = "Delay ada" if status == "O" else ("Tidak ada delay" if status == "X" else "-")
-        giling_delay_lines.append(f"- [{idx}] {jam} | {status_label} | {detail}")
-    if not giling_delay_lines:
-        fallback_delay = str(d.get("giling_delay_detail", "")).strip()
-        giling_delay_lines = [fallback_delay] if fallback_delay else ["- Tidak ada log delay"]
-
-    vacum_ops_rows = d.get("vacum_ops_rows", [])
-    vacum_ops_lines: List[str] = []
-    for idx, row in enumerate(vacum_ops_rows, start=1):
-        start_stop = str(row.get("stop_start", row.get("jam", ""))).strip()
-        end_stop = str(row.get("stop_end", "")).strip()
-        jam = start_stop or str(row.get("jam", "")).strip() or "-"
-        antrian = str(row.get("antrian_status", "")).strip() or "-"
-        antrian_detail = str(row.get("antrian_detail", "")).strip() or "-"
-        mesin = str(row.get("mesin_status", "")).strip() or "-"
-        mesin_detail = str(row.get("mesin_detail", "")).strip() or "-"
-        kirim = str(row.get("kirim_status", "")).strip() or "-"
-        pic = str(row.get("pic_cek", "")).strip() or "-"
-        stop_window = jam
-        if start_stop or end_stop:
-            stop_window = f"{start_stop or '-'}-{end_stop or '-'}"
-        mesin_label = "stop/istirahat" if mesin == "O" else ("normal" if mesin == "X" else "-")
-        vacum_ops_lines.append(
-            f"- {stop_window} | mesin:{mesin_label} ({mesin_detail}) | antrian:{antrian} ({antrian_detail}) | kirim:{kirim} | PIC:{pic}"
-        )
-    if not vacum_ops_lines:
-        vacum_ops_lines = ["- Tidak ada log operasional vacum"]
-
-    tempat_buang_rows = d.get("tempat_buang_rows", [])
-    tempat_buang_lines: List[str] = []
-    for idx, row in enumerate(tempat_buang_rows, start=1):
-        jam = str(row.get("jam", "")).strip() or "-"
-        status = str(row.get("status", "")).strip() or "-"
-        catatan = str(row.get("catatan", "")).strip()
-        line = f"- [{idx}] {jam} | {status}"
-        if catatan:
-            line += f" | {catatan}"
-        tempat_buang_lines.append(line)
-    if not tempat_buang_lines:
-        tempat_buang_lines = [
-            f"-> {d.get('tempat_buang_siap', '-') or '-'} | Jam cek: {d.get('tempat_buang_check_time', '-') or '-'}"
-        ]
+    total_giling = str(d.get("total_giling", "")).strip() or str(d.get("giling_total_resep_auto", "")).strip() or "-"
+    total_vacum = str(d.get("total_hasil_vakum", "")).strip() or str(d.get("vacum_total_pack_auto", "")).strip() or "-"
 
     return [
         "\n".join(
             [
-                "1. PRODUK",
-                f"- Jam kerja: {d.get('jam_kerja_mulai', '-')} - {d.get('jam_kerja_selesai', '-')}",
-                f"- Produk: {d.get('produk', '-') or '-'}",
-                f"- 1-2. Jumlah isi barang dalam pillow: {d.get('isi_pillow_kg', '-') or '-'}",
-                f"- 1-3. Nama petugas: {nama_petugas_txt}",
-                f"- 1-4. Timer ada?: {d.get('timer_ada', '-') or '-'}",
-                f"- Petugas vakum / PIC: {d.get('petugas_vacum', '-') or '-'}",
+                f"1. Produk : {_v(d.get('produk'))}",
+                f"- Jam kerja : {_v(d.get('jam_kerja_mulai'))} - {_v(d.get('jam_kerja_selesai'))}",
+                f"1-2. Jumlah isi barang dalam pillow : {_v(d.get('isi_pillow_kg'))}",
+                f"1-3. Nama petugas : {nama_petugas_txt}",
+                f"1-4. Timer ada ? : {_v(d.get('timer_ada'))}",
+                f"-> Petugas vakum / PIC : {_v(d.get('petugas_vacum'))}",
             ]
         ),
         "\n".join(
             [
-                "2-1. STATUS DEFROST",
-                status_defrost,
-                f"-> Total pack defrost (otomatis): {d.get('defrost_total_pack_auto', '-') or '-'} pack",
-                f"-> Total barang beku diambil: {d.get('total_beku', '-') or '-'}",
-                f"-> Total bb fresh dipakai: {d.get('total_fresh_kg', 0)} kg",
-                f"-> Total bb dibuang: {d.get('total_buang_kg', 0)} kg",
-                f"-> Total: {d.get('total_akhir_kg', 0)} kg (jenis barang 1 + jenis barang 2)",
+                "2-1. Status defrost",
+                "(Kalau sudah habis dipakai, tulis habis)",
+                *defrost_lines,
+                f"-> Total barang beku di ambil : {_v(d.get('total_beku'))}",
+                f"-> Total bb fresh dipakai : {_v(d.get('total_fresh_kg', '0'))}kg",
+                f"-> Total bb dibuang : {_v(d.get('total_buang_kg', '0'))}kg",
+                f"-> Total : {_v(d.get('total_akhir_kg', '0'))}kg (Barang beku + bb fresh - bb dibuang)",
             ]
         ),
         "\n".join(
             [
-                "2-2. Tempat buang pillow sudah siap dekat meja/rak, dan sudah dikosongkan kalau sudah penuh?",
-                *tempat_buang_lines,
+                "2-2. Tempat untuk buang pillow barang defrost sudah siap dekat meja atau rak defrost?",
+                *tempat_buang,
             ]
         ),
         "\n".join(
             [
-                "3-1. STATUS GILING",
-                status_giling,
-                f"-> Total resep giling (otomatis): {d.get('giling_total_resep_auto', d.get('giling_total_pack_auto', '-')) or '-'} resep",
-                f"--> Total Giling: {d.get('total_giling', '-') or '-'} resep",
-                f"-> Status delay giling (ringkas): {d.get('giling_delay_lama', '-') or '-'}",
-                "-> Log delay giling:",
-                *giling_delay_lines,
+                "3-1. Status Giling",
+                *(giling_lines or ["-"]),
+                f"--> Total Giling : {total_giling} resep",
+                *(["-> Log delay giling:", *delay_lines] if delay_lines else []),
             ]
         ),
         "\n".join(
             [
-                "3-2. STATUS VACUM",
-                status_vacum,
-                f"-> Total pack vacum (otomatis): {d.get('vacum_total_pack_auto', '-') or '-'} pack",
-                f"-> Total vakum diproses: {d.get('total_hasil_vakum', '-') or '-'} pack",
-                f"-> Total vakum bermasalah: {d.get('total_vacum_defect_pack', '-') or '-'} pack",
-                f"-> Total vakum normal (setelah masalah): {d.get('total_vacum_ok_pack', '-') or '-'} pack",
-                f"-> Barang ada masalah vacum/pillow: {d.get('jenis_defect_vacum', '-') or '-'}",
-                f"-> Antrian vacum terlalu lama?: {d.get('vacum_antrian_lama', '-') or '-'}",
-                f"-> Detail antrian vacum: {d.get('vacum_antrian_detail', '-') or '-'}",
-                f"-> Mesin vacum sudah cukup istirahat?: {d.get('mesin_vacum_istirahat', '-') or '-'}",
-                f"-> Detail kondisi mesin vacum: {d.get('mesin_vacum_istirahat_detail', '-') or '-'}",
-                f"-> Sudah dikirim semua?: {d.get('sudah_dikirim_semua', '-') or '-'}",
-                f"-> Petugas cek: {d.get('nama_pic_cek', '-') or '-'}",
-                "-> Log operasional vacum:",
-                *vacum_ops_lines,
+                "3-2. Status vacum",
+                *(vacum_lines or ["-"]),
+                f"-> Total Hasil vakum : {total_vacum} pack",
+                f"-> Sudah dikirim semua? : {_v(d.get('sudah_dikirim_semua'))}",
+                f"-> Nama : {_v(d.get('nama_pic_cek'))}",
+                *(["-> Log operasional vacum:", *vac_ops_lines] if vac_ops_lines else []),
             ]
         ),
+        "\n".join(["4. Total barang ada masalah", _v(d.get("masalah_total_barang"), "-")]),
         "\n".join(
             [
-                "4. TOTAL BARANG ADA MASALAH",
-                d.get("masalah_total_barang", "").strip() or "- Tidak ada masalah barang",
+                "5. Total barang dikirim ke packing (atau press)",
+                f"-> Dikirim kupas : {_v(d.get('total_dikirim_packing'))} pack",
+                f"-> Diterima packing : {_v(d.get('total_diterima_packing'))} pack",
+                f"-> Selisih : {_v(d.get('selisih_handover_packing'))} pack",
+                f"-> Status cocok : {_v(d.get('status_handover_packing'))}",
+                *(["-> Log serah-terima:", *handover_lines] if handover_lines else []),
             ]
         ),
-        "\n".join(
-            [
-                "5. TOTAL BARANG DIKIRIM KE PACKING (ATAU PRESS)",
-                f"-> Dikirim kupas: {d.get('total_dikirim_packing', '-') or '-'} pack",
-                f"-> Diterima packing: {d.get('total_diterima_packing', '-') or '-'} pack",
-                f"-> Selisih: {d.get('selisih_handover_packing', '-') or '-'} pack",
-                f"-> Status cocok: {d.get('status_handover_packing', '-') or '-'}",
-                f"-> Bukti foto handover: {d.get('handover_photo_name', '-') or '-'}",
-                "-> Log serah-terima:",
-                *handover_lines,
-            ]
-        ),
-        "\n".join(["CATATAN", d.get("catatan", "-") or "-"]),
+        "\n".join(["CATATAN", _v(d.get("catatan"), "-")]),
     ]
+
+
 def render_steril_blocks(payload: Dict[str, Any]) -> List[str]:
     d = payload["details"]
     nama_petugas = d.get("nama_petugas_list", [])
-    nama_petugas_txt = ", ".join([str(x) for x in nama_petugas if str(x).strip()]) or "-"
-    status_defrost = str(d.get("status_defrost", "")).strip() or "-"
-    status_giling = str(d.get("status_giling", "")).strip() or "-"
-    tempat_buang_rows = d.get("tempat_buang_rows", [])
-    tempat_buang_lines: List[str] = []
-    for idx, row in enumerate(tempat_buang_rows, start=1):
-        jam = str(row.get("jam", "")).strip() or "-"
-        status = str(row.get("status", "")).strip() or "-"
-        catatan = str(row.get("catatan", "")).strip()
-        line = f"- [{idx}] {jam} | {status}"
-        if catatan:
-            line += f" | {catatan}"
-        tempat_buang_lines.append(line)
-    if not tempat_buang_lines:
-        tempat_buang_lines = [
-            f"-> {d.get('tempat_buang_siap', '-') or '-'} | Jam cek: {d.get('tempat_buang_check_time', '-') or '-'}"
-        ]
+    nama_petugas_txt = ", ".join([str(x).strip() for x in nama_petugas if str(x).strip()]) or "-"
 
-    steril_rows = d.get("steril_rows", [])
+    defrost_lines = _defrost_lines(d)
+    tempat_buang = _tempat_buang_lines(d)
+    giling_lines = _clean_text_lines(d.get("status_giling", ""))
+
     steril_lines: List[str] = []
-    steril_total_panci = 0.0
-    for idx, row in enumerate(steril_rows, start=1):
-        no = str(row.get("no", "")).strip() or str(idx)
-        jam = str(row.get("jam", "")).strip() or "-"
-        batch = str(row.get("batch", "")).strip() or "-"
-        panci = str(row.get("panci", "")).strip() or "-"
-        catatan = str(row.get("catatan", "")).strip()
-        panci_val = parse_optional_float(panci)
-        if panci_val is not None and panci_val >= 0:
-            steril_total_panci += panci_val
-        line = f"- [{no}] {jam} steril batch {batch} ({panci} panci)"
-        if catatan:
-            line += f" | {catatan}"
+    for row in d.get("steril_rows", []) if isinstance(d.get("steril_rows", []), list) else []:
+        jam = _fmt_jam(row.get("jam", ""))
+        batch = _v(row.get("batch"))
+        panci = _v(row.get("panci"))
+        cat = str(row.get("catatan", "")).strip()
+        line = f"- {jam or '-'} steril batch {batch} ({panci} panci)"
+        if cat and not _is_placeholder(cat):
+            line += f" | {cat}"
         steril_lines.append(line)
     if not steril_lines:
-        steril_fallback = str(d.get("status_steril", "")).strip()
-        steril_lines = [steril_fallback] if steril_fallback else ["- Belum ada log steril"]
+        steril_lines = _clean_text_lines(d.get("status_steril", "")) or ["-"]
 
-    total_breakdown_rows = d.get("total_steril_breakdown_rows", [])
     total_breakdown_lines: List[str] = []
-    for row in total_breakdown_rows:
+    for row in d.get("total_steril_breakdown_rows", []) if isinstance(d.get("total_steril_breakdown_rows", []), list) else []:
         qty = str(row.get("qty_panci", "")).strip()
         berat = str(row.get("berat_kg", "")).strip()
         if qty and berat:
             total_breakdown_lines.append(f"- {qty} panci @{berat}kg")
-        elif qty:
-            total_breakdown_lines.append(f"- {qty} panci")
     if not total_breakdown_lines:
-        fallback_total = str(d.get("total_produk_steril", "")).strip()
-        total_breakdown_lines = [fallback_total] if fallback_total else ["- Belum ada rincian total steril"]
+        total_breakdown_lines = [_v(d.get("total_produk_steril"), "-")]
 
-    steril_check_rows = d.get("steril_check_rows", [])
-    steril_check_lines: List[str] = []
-    for idx, row in enumerate(steril_check_rows, start=1):
-        no = str(row.get("no", "")).strip() or str(idx)
-        batch = str(row.get("batch", "")).strip() or "-"
-        jam_target = str(row.get("jam_target", "")).strip() or "-"
-        jam_actual = str(row.get("jam_actual", "")).strip() or "-"
-        status = str(row.get("status", "")).strip() or "-"
-        steril_check_lines.append(f"- [{no}] batch {batch} | target {jam_target} | aktual {jam_actual} | {status}")
-    if not steril_check_lines:
-        steril_check_lines = ["- Belum ada cek jam steril"]
+    check_lines: List[str] = []
+    for row in d.get("steril_check_rows", []) if isinstance(d.get("steril_check_rows", []), list) else []:
+        batch = _v(row.get("batch"))
+        actual = _fmt_jam(row.get("jam_actual", "")) or "-"
+        status = _v(row.get("status"), "-")
+        check_lines.append(f"- {actual} steril batch {batch} | {status}")
+    if not check_lines:
+        check_lines = ["-"]
 
-    cb_rows = d.get("cb_rows", [])
     cb_lines: List[str] = []
-    for idx, row in enumerate(cb_rows, start=1):
-        no = str(row.get("no", "")).strip() or str(idx)
-        jam = str(row.get("jam", "")).strip() or "-"
-        batch = str(row.get("batch", "")).strip() or "-"
-        panci = str(row.get("panci", "")).strip() or "-"
-        catatan = str(row.get("catatan", "")).strip()
-        line = f"- [{no}] {jam} cb batch {batch} ({panci} panci)"
-        if catatan:
-            line += f" | {catatan}"
-        cb_lines.append(line)
+    for row in d.get("cb_rows", []) if isinstance(d.get("cb_rows", []), list) else []:
+        jam = _fmt_jam(row.get("jam", ""))
+        batch = _v(row.get("batch"))
+        panci = _v(row.get("panci"))
+        cb_lines.append(f"- {jam or '-'} cb batch {batch} ({panci} panci)")
     if not cb_lines:
-        cb_lines = ["- Belum ada log CB"]
+        cb_lines = ["-"]
+
+    total_giling = str(d.get("total_giling", "")).strip() or str(d.get("giling_total_resep_auto", "")).strip() or "-"
 
     return [
         "\n".join(
             [
-                "1. PRODUK",
-                f"- Jam kerja: {d.get('jam_kerja_mulai', '-')} - {d.get('jam_kerja_selesai', '-')}",
-                f"- Produk: {d.get('produk', '-') or '-'}",
-                f"- 1-2. Jumlah isi untuk steril: {d.get('isi_steril', '-') or '-'}",
-                f"- 1-3. Nama petugas: {nama_petugas_txt}",
-                f"- 1-4. Timer ada?: {d.get('timer_ada', '-') or '-'}",
-                f"- Petugas steril: {d.get('petugas_steril', '-') or '-'}",
-                f"- Target steril: {d.get('rencana_steril', '-') or '-'}",
+                f"1. Produk : {_v(d.get('produk'))}",
+                f"- Jam kerja : {_v(d.get('jam_kerja_mulai'))} - {_v(d.get('jam_kerja_selesai'))}",
+                f"1-2. Jumlah isi barang untuk steril : {_v(d.get('isi_steril'))}",
+                f"1-3. Nama petugas : {nama_petugas_txt}",
+                f"1-4. Timer ada ? : {_v(d.get('timer_ada'))}",
+                f"-> Petugas steril : {_v(d.get('petugas_steril'))}",
+                f"-> Rencana jam steril : {_v(d.get('rencana_steril'))}",
             ]
         ),
         "\n".join(
             [
-                "2-1. STATUS DEFROST",
-                status_defrost,
-                f"-> Total pack defrost (otomatis): {d.get('defrost_total_pack_auto', '-') or '-'} pack",
-                f"-> Total barang beku diambil: {d.get('total_beku', '-') or '-'}",
-                f"-> Total bb fresh dipakai: {d.get('total_fresh_kg', 0)} kg",
-                f"-> Total bb dibuang: {d.get('total_buang_kg', 0)} kg",
-                f"-> Total: {d.get('total_akhir_kg', 0)} kg",
+                "2-1. Status defrost",
+                "(Kalau sudah habis dipakai, tulis habis)",
+                *defrost_lines,
+                f"-> Total barang beku di ambil : {_v(d.get('total_beku'))}",
+                f"-> Total bb fresh dipakai : {_v(d.get('total_fresh_kg', '0'))}kg",
+                f"-> Total bb dibuang : {_v(d.get('total_buang_kg', '0'))}kg",
+                f"-> Total : {_v(d.get('total_akhir_kg', '0'))}kg",
             ]
         ),
         "\n".join(
             [
-                "2-2. Tempat buang pillow sudah siap dekat meja/rak, dan sudah dikosongkan kalau sudah penuh?",
-                *tempat_buang_lines,
+                "2-2. Tempat untuk buang pillow barang defrost sudah siap dekat meja atau rak defrost?",
+                *tempat_buang,
             ]
+        ),
+        "\n".join(["3-1. Status Giling", *(giling_lines or ["-"]), f"--> Total Giling : {total_giling} resep"]),
+        "\n".join(["3-2. Status Steril / Status Gas", *steril_lines, "-> Total Steril :", *total_breakdown_lines]),
+        "\n".join(
+            [f"3-2-1. Jam steril sudah sesuai? (Target : {_v(d.get('steril_target_minutes', '75'))} menit)", *check_lines]
         ),
         "\n".join(
             [
-                "3-1. STATUS GILING",
-                status_giling,
-                f"-> Total resep giling (otomatis): {d.get('giling_total_resep_auto', d.get('giling_total_pack_auto', '-')) or '-'} resep",
-                f"--> Total Giling: {d.get('total_giling', '-') or '-'} resep",
-            ]
-        ),
-        "\n".join(
-            [
-                "3-2. STATUS STERIL / STATUS GAS",
-                *steril_lines,
-                f"-> Total panci steril (otomatis): {format_float_compact(steril_total_panci)} panci",
-                "-> Total Steril:",
-                *total_breakdown_lines,
-            ]
-        ),
-        "\n".join(
-            [
-                f"3-2-1. JAM STERIL SUDAH SESUAI? (Target: {d.get('steril_target_minutes', '75')} menit)",
-                *steril_check_lines,
-            ]
-        ),
-        "\n".join(
-            [
-                "3-3. STATUS COOLBATH (CB)",
-                f"-> CB siap: {d.get('cb_siap', '-') or '-'}",
-                f"-> CB dinyalakan: {d.get('cb_nyala', '-') or '-'}",
-                "-> Jam produk masuk ke CB:",
+                "3-3. Status Coolbath (CB)",
+                f"-> CB sudah dibersihkan dan isi air : {_v(d.get('cb_siap'))}",
+                f"-> CB sudah dinyalakan : {_v(d.get('cb_nyala'))}",
+                "-> Jam produk masuk ke CB",
                 *cb_lines,
-                "-> Total Produk Steril:",
+                "-> Total Produk Steril :",
                 *total_breakdown_lines,
-                f"-> Produk diambil <=20 menit: {d.get('ambil_20_menit', '-') or '-'}",
-                f"-> Tidak ada sisa CB: {d.get('tidak_ada_sisa_cb', '-') or '-'}",
+                f"-> Produk harus diambil packing dalam 20 menit : {_v(d.get('ambil_20_menit'))}",
+                f"-> Tidak ada sisa barang di CB : {_v(d.get('tidak_ada_sisa_cb'))}",
             ]
         ),
-        "\n".join(["CATATAN", d.get("catatan", "-") or "-"]),
+        "\n".join(["CATATAN", _v(d.get("catatan"), "-")]),
     ]
 
 
