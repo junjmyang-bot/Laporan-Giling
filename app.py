@@ -331,6 +331,16 @@ def drop_last_row_from_session(
     st.session_state[count_key] = current - 1
 
 
+def is_row_action_click() -> bool:
+    for key, value in st.session_state.items():
+        if not isinstance(key, str):
+            continue
+        if key.startswith("btn_add_") or key.startswith("btn_del_"):
+            if bool(value):
+                return True
+    return False
+
+
 def normalize_giling_status_input(
     raw_status: str,
     next_batch: int,
@@ -1891,30 +1901,32 @@ def main() -> None:
             )
             defrost_total_pack_auto = str(loaded_details.get("defrost_total_pack_auto", ""))
             if mode_defrost == "List baris":
-                loaded_defrost_rows_non = loaded_details.get("defrost_rows", [])
-                if isinstance(loaded_defrost_rows_non, list) and loaded_defrost_rows_non:
-                    existing_defrost_local = False
-                    for i in range(20):
-                        if str(st.session_state.get(f"def_jam_non_{i}", "")).strip() or str(
-                            st.session_state.get(f"def_isi_non_{i}", "")
-                        ).strip() or str(st.session_state.get(f"def_kg_non_{i}", "")).strip() or str(
-                            st.session_state.get(f"def_cat_non_{i}", "")
-                        ).strip():
-                            existing_defrost_local = True
-                            break
-                    if not existing_defrost_local:
-                        st.session_state["defrost_rows_non"] = min(20, max(1, len(loaded_defrost_rows_non)))
-                        for idx, row in enumerate(loaded_defrost_rows_non[:20]):
-                            st.session_state[f"def_no_non_{idx}"] = str(row.get("no", idx + 1))
-                            st.session_state[f"def_jam_non_{idx}"] = str(row.get("jam", ""))
-                            st.session_state[f"def_isi_non_{idx}"] = str(row.get("status", ""))
-                            st.session_state[f"def_kg_non_{idx}"] = str(row.get("pack", ""))
-                            st.session_state[f"def_cat_non_{idx}"] = str(row.get("catatan", ""))
+                seed_defrost_non_key = f"seed_defrost_non::{team_id}::{work_date}"
+                if not st.session_state.get(seed_defrost_non_key, False):
+                    loaded_defrost_rows_non = loaded_details.get("defrost_rows", [])
+                    if isinstance(loaded_defrost_rows_non, list) and loaded_defrost_rows_non:
+                        existing_defrost_local = False
+                        for i in range(20):
+                            if str(st.session_state.get(f"def_jam_non_{i}", "")).strip() or str(
+                                st.session_state.get(f"def_isi_non_{i}", "")
+                            ).strip() or str(st.session_state.get(f"def_kg_non_{i}", "")).strip() or str(
+                                st.session_state.get(f"def_cat_non_{i}", "")
+                            ).strip():
+                                existing_defrost_local = True
+                                break
+                        if not existing_defrost_local:
+                            st.session_state["defrost_rows_non"] = min(20, max(1, len(loaded_defrost_rows_non)))
+                            for idx, row in enumerate(loaded_defrost_rows_non[:20]):
+                                st.session_state[f"def_no_non_{idx}"] = str(row.get("no", idx + 1))
+                                st.session_state[f"def_jam_non_{idx}"] = str(row.get("jam", ""))
+                                st.session_state[f"def_isi_non_{idx}"] = str(row.get("status", ""))
+                                st.session_state[f"def_kg_non_{idx}"] = str(row.get("pack", ""))
+                                st.session_state[f"def_cat_non_{idx}"] = str(row.get("catatan", ""))
+                    st.session_state[seed_defrost_non_key] = True
                 d1, d2, d3 = st.columns([2, 2, 6])
                 with d1:
                     if st.button("+ Tambah", key="btn_add_defrost"):
                         st.session_state["defrost_rows_non"] = min(20, int(st.session_state.get("defrost_rows_non", 1)) + 1)
-                        st.rerun()
                 with d2:
                     if st.button("- Hapus", key="btn_del_defrost"):
                         drop_last_row_from_session(
@@ -1922,7 +1934,6 @@ def main() -> None:
                             ["def_jam_non_", "def_isi_non_", "def_kg_non_", "def_cat_non_"],
                             min_rows=1,
                         )
-                        st.rerun()
                 with d3:
                     pass
 
@@ -2137,33 +2148,35 @@ def main() -> None:
                 )
             st.markdown("### 2-2. Tempat buang pillow")
             st.caption("Tiap laporan: tambah 1 log (jam + O/X). Gunakan catatan hanya jika perlu.")
-            loaded_tempat_rows_non = loaded_details.get("tempat_buang_rows", [])
-            if isinstance(loaded_tempat_rows_non, list) and loaded_tempat_rows_non:
-                existing_tempat_local = False
-                for i in range(20):
-                    if str(st.session_state.get(f"tb_jam_non_{i}", "")).strip() or str(
-                        st.session_state.get(f"tb_status_non_{i}", "")
-                    ).strip() or str(st.session_state.get(f"tb_cat_non_{i}", "")).strip():
-                        existing_tempat_local = True
-                        break
-                if not existing_tempat_local:
-                    st.session_state["tempat_buang_rows_non"] = min(20, max(1, len(loaded_tempat_rows_non)))
-                    for idx, row in enumerate(loaded_tempat_rows_non[:20]):
-                        st.session_state[f"tb_jam_non_{idx}"] = str(row.get("jam", ""))
-                        st.session_state[f"tb_status_non_{idx}"] = str(row.get("status", ""))
-                        st.session_state[f"tb_cat_non_{idx}"] = str(row.get("catatan", ""))
-            elif str(loaded_details.get("tempat_buang_siap", "")).strip() or str(loaded_details.get("tempat_buang_check_time", "")).strip():
-                if not str(st.session_state.get("tb_jam_non_0", "")).strip() and not str(st.session_state.get("tb_status_non_0", "")).strip():
-                    st.session_state["tempat_buang_rows_non"] = 1
-                    st.session_state["tb_jam_non_0"] = str(loaded_details.get("tempat_buang_check_time", ""))
-                    st.session_state["tb_status_non_0"] = str(loaded_details.get("tempat_buang_siap", ""))
-                    st.session_state["tb_cat_non_0"] = ""
+            seed_tempat_non_key = f"seed_tempat_non::{team_id}::{work_date}"
+            if not st.session_state.get(seed_tempat_non_key, False):
+                loaded_tempat_rows_non = loaded_details.get("tempat_buang_rows", [])
+                if isinstance(loaded_tempat_rows_non, list) and loaded_tempat_rows_non:
+                    existing_tempat_local = False
+                    for i in range(20):
+                        if str(st.session_state.get(f"tb_jam_non_{i}", "")).strip() or str(
+                            st.session_state.get(f"tb_status_non_{i}", "")
+                        ).strip() or str(st.session_state.get(f"tb_cat_non_{i}", "")).strip():
+                            existing_tempat_local = True
+                            break
+                    if not existing_tempat_local:
+                        st.session_state["tempat_buang_rows_non"] = min(20, max(1, len(loaded_tempat_rows_non)))
+                        for idx, row in enumerate(loaded_tempat_rows_non[:20]):
+                            st.session_state[f"tb_jam_non_{idx}"] = str(row.get("jam", ""))
+                            st.session_state[f"tb_status_non_{idx}"] = str(row.get("status", ""))
+                            st.session_state[f"tb_cat_non_{idx}"] = str(row.get("catatan", ""))
+                elif str(loaded_details.get("tempat_buang_siap", "")).strip() or str(loaded_details.get("tempat_buang_check_time", "")).strip():
+                    if not str(st.session_state.get("tb_jam_non_0", "")).strip() and not str(st.session_state.get("tb_status_non_0", "")).strip():
+                        st.session_state["tempat_buang_rows_non"] = 1
+                        st.session_state["tb_jam_non_0"] = str(loaded_details.get("tempat_buang_check_time", ""))
+                        st.session_state["tb_status_non_0"] = str(loaded_details.get("tempat_buang_siap", ""))
+                        st.session_state["tb_cat_non_0"] = ""
+                st.session_state[seed_tempat_non_key] = True
 
             tb1, tb2, tb3 = st.columns([2, 2, 6])
             with tb1:
                 if st.button("+ Tambah", key="btn_add_tempat_non"):
                     st.session_state["tempat_buang_rows_non"] = min(20, int(st.session_state.get("tempat_buang_rows_non", 1)) + 1)
-                    st.rerun()
             with tb2:
                 if st.button("- Hapus", key="btn_del_tempat_non"):
                     drop_last_row_from_session(
@@ -2171,7 +2184,6 @@ def main() -> None:
                         ["tb_jam_non_", "tb_status_non_", "tb_cat_non_"],
                         min_rows=1,
                     )
-                    st.rerun()
             with tb3:
                 pass
 
@@ -2235,7 +2247,6 @@ def main() -> None:
                 with g1:
                     if st.button("+ Tambah", key="btn_add_giling"):
                         st.session_state["giling_rows_non"] = min(20, int(st.session_state.get("giling_rows_non", 1)) + 1)
-                        st.rerun()
                 with g2:
                     if st.button("- Hapus", key="btn_del_giling"):
                         drop_last_row_from_session(
@@ -2243,7 +2254,6 @@ def main() -> None:
                             ["gil_jam_non_", "gil_isi_non_", "gil_kg_non_", "gil_cat_non_"],
                             min_rows=1,
                         )
-                        st.rerun()
                 with g3:
                     pass
 
@@ -2321,35 +2331,37 @@ def main() -> None:
                 placeholder="contoh: 15",
             )
             st.markdown("#### Log delay giling (tiap laporan)")
-            loaded_delay_rows = loaded_details.get("giling_delay_rows", [])
-            if isinstance(loaded_delay_rows, list) and loaded_delay_rows:
-                existing_delay_local = False
-                for i in range(20):
-                    if str(st.session_state.get(f"delay_jam_non_{i}", "")).strip() or str(
-                        st.session_state.get(f"delay_status_non_{i}", "")
-                    ).strip() or str(st.session_state.get(f"delay_detail_non_{i}", "")).strip():
-                        existing_delay_local = True
-                        break
-                if not existing_delay_local:
-                    st.session_state["giling_delay_rows_non"] = min(20, max(1, len(loaded_delay_rows)))
-                    for idx, row in enumerate(loaded_delay_rows[:20]):
-                        st.session_state[f"delay_jam_non_{idx}"] = str(row.get("jam", ""))
-                        st.session_state[f"delay_status_non_{idx}"] = str(row.get("status", ""))
-                        st.session_state[f"delay_detail_non_{idx}"] = str(row.get("detail", ""))
-            elif str(loaded_details.get("giling_delay_lama", "")).strip() or str(loaded_details.get("giling_delay_detail", "")).strip():
-                if not str(st.session_state.get("delay_jam_non_0", "")).strip() and not str(
-                    st.session_state.get("delay_status_non_0", "")
-                ).strip() and not str(st.session_state.get("delay_detail_non_0", "")).strip():
-                    st.session_state["giling_delay_rows_non"] = 1
-                    st.session_state["delay_jam_non_0"] = ""
-                    st.session_state["delay_status_non_0"] = str(loaded_details.get("giling_delay_lama", ""))
-                    st.session_state["delay_detail_non_0"] = str(loaded_details.get("giling_delay_detail", ""))
+            seed_delay_non_key = f"seed_delay_non::{team_id}::{work_date}"
+            if not st.session_state.get(seed_delay_non_key, False):
+                loaded_delay_rows = loaded_details.get("giling_delay_rows", [])
+                if isinstance(loaded_delay_rows, list) and loaded_delay_rows:
+                    existing_delay_local = False
+                    for i in range(20):
+                        if str(st.session_state.get(f"delay_jam_non_{i}", "")).strip() or str(
+                            st.session_state.get(f"delay_status_non_{i}", "")
+                        ).strip() or str(st.session_state.get(f"delay_detail_non_{i}", "")).strip():
+                            existing_delay_local = True
+                            break
+                    if not existing_delay_local:
+                        st.session_state["giling_delay_rows_non"] = min(20, max(1, len(loaded_delay_rows)))
+                        for idx, row in enumerate(loaded_delay_rows[:20]):
+                            st.session_state[f"delay_jam_non_{idx}"] = str(row.get("jam", ""))
+                            st.session_state[f"delay_status_non_{idx}"] = str(row.get("status", ""))
+                            st.session_state[f"delay_detail_non_{idx}"] = str(row.get("detail", ""))
+                elif str(loaded_details.get("giling_delay_lama", "")).strip() or str(loaded_details.get("giling_delay_detail", "")).strip():
+                    if not str(st.session_state.get("delay_jam_non_0", "")).strip() and not str(
+                        st.session_state.get("delay_status_non_0", "")
+                    ).strip() and not str(st.session_state.get("delay_detail_non_0", "")).strip():
+                        st.session_state["giling_delay_rows_non"] = 1
+                        st.session_state["delay_jam_non_0"] = ""
+                        st.session_state["delay_status_non_0"] = str(loaded_details.get("giling_delay_lama", ""))
+                        st.session_state["delay_detail_non_0"] = str(loaded_details.get("giling_delay_detail", ""))
+                st.session_state[seed_delay_non_key] = True
 
             gd1, gd2, gd3 = st.columns([2, 2, 6])
             with gd1:
                 if st.button("+ Tambah", key="btn_add_delay_giling"):
                     st.session_state["giling_delay_rows_non"] = min(20, int(st.session_state.get("giling_delay_rows_non", 1)) + 1)
-                    st.rerun()
             with gd2:
                 if st.button("- Hapus", key="btn_del_delay_giling"):
                     drop_last_row_from_session(
@@ -2357,7 +2369,6 @@ def main() -> None:
                         ["delay_jam_non_", "delay_status_non_", "delay_detail_non_"],
                         min_rows=1,
                     )
-                    st.rerun()
             with gd3:
                 pass
 
@@ -2443,7 +2454,6 @@ def main() -> None:
                 with v1:
                     if st.button("+ Tambah", key="btn_add_vacum"):
                         st.session_state["vacum_rows_non"] = min(20, int(st.session_state.get("vacum_rows_non", 1)) + 1)
-                        st.rerun()
                 with v2:
                     if st.button("- Hapus", key="btn_del_vacum"):
                         drop_last_row_from_session(
@@ -2451,7 +2461,6 @@ def main() -> None:
                             ["vac_jam_non_", "vac_isi_non_", "vac_kg_non_", "vac_cat_non_"],
                             min_rows=1,
                         )
-                        st.rerun()
                 with v3:
                     pass
 
@@ -2565,7 +2574,6 @@ def main() -> None:
             with vd1:
                 if st.button("+ Tambah", key="btn_add_vac_defect"):
                     st.session_state["vacum_defect_rows_non"] = min(20, int(st.session_state.get("vacum_defect_rows_non", 1)) + 1)
-                    st.rerun()
             with vd2:
                 if st.button("- Hapus", key="btn_del_vac_defect"):
                     drop_last_row_from_session(
@@ -2573,7 +2581,6 @@ def main() -> None:
                         ["vac_defect_type_non_", "vac_defect_jenis_non_", "vac_defect_qty_non_", "vac_defect_note_non_"],
                         min_rows=1,
                     )
-                    st.rerun()
             with vd3:
                 pass
 
@@ -2684,7 +2691,6 @@ def main() -> None:
             with vo1:
                 if st.button("+ Tambah", key="btn_add_vac_ops"):
                     st.session_state["vacum_ops_rows_non"] = min(20, int(st.session_state.get("vacum_ops_rows_non", 1)) + 1)
-                    st.rerun()
             with vo2:
                 if st.button("- Hapus", key="btn_del_vac_ops"):
                     drop_last_row_from_session(
@@ -2700,7 +2706,6 @@ def main() -> None:
                         ],
                         min_rows=1,
                     )
-                    st.rerun()
             with vo3:
                 pass
 
@@ -2820,38 +2825,40 @@ def main() -> None:
                 placeholder="- Basi 2kg\n- Kemasan/pojac sobek 10 pack",
             )
             st.markdown("### 5. Total barang dikirim ke packing (atau press)")
-            loaded_handover_rows = loaded_details.get("handover_rows", [])
-            if isinstance(loaded_handover_rows, list) and loaded_handover_rows:
-                existing_handover_local = False
-                for i in range(30):
-                    for prefix in [
-                        "handover_jam_non_",
-                        "handover_kirim_non_",
-                        "handover_terima_non_",
-                        "handover_tl_non_",
-                        "handover_pic_non_",
-                        "handover_alasan_non_",
-                    ]:
-                        if str(st.session_state.get(f"{prefix}{i}", "")).strip():
-                            existing_handover_local = True
+            seed_handover_non_key = f"seed_handover_non::{team_id}::{work_date}"
+            if not st.session_state.get(seed_handover_non_key, False):
+                loaded_handover_rows = loaded_details.get("handover_rows", [])
+                if isinstance(loaded_handover_rows, list) and loaded_handover_rows:
+                    existing_handover_local = False
+                    for i in range(30):
+                        for prefix in [
+                            "handover_jam_non_",
+                            "handover_kirim_non_",
+                            "handover_terima_non_",
+                            "handover_tl_non_",
+                            "handover_pic_non_",
+                            "handover_alasan_non_",
+                        ]:
+                            if str(st.session_state.get(f"{prefix}{i}", "")).strip():
+                                existing_handover_local = True
+                                break
+                        if existing_handover_local:
                             break
-                    if existing_handover_local:
-                        break
-                if not existing_handover_local:
-                    st.session_state["handover_rows_non"] = min(30, max(1, len(loaded_handover_rows)))
-                    for idx, row in enumerate(loaded_handover_rows[:30]):
-                        st.session_state[f"handover_jam_non_{idx}"] = str(row.get("jam", ""))
-                        st.session_state[f"handover_kirim_non_{idx}"] = str(row.get("kirim_pack", ""))
-                        st.session_state[f"handover_terima_non_{idx}"] = str(row.get("terima_pack", ""))
-                        st.session_state[f"handover_tl_non_{idx}"] = str(row.get("tl_packing", ""))
-                        st.session_state[f"handover_pic_non_{idx}"] = str(row.get("tl_kupas", row.get("pic_packing", "")))
-                        st.session_state[f"handover_alasan_non_{idx}"] = str(row.get("alasan_selisih", ""))
+                    if not existing_handover_local:
+                        st.session_state["handover_rows_non"] = min(30, max(1, len(loaded_handover_rows)))
+                        for idx, row in enumerate(loaded_handover_rows[:30]):
+                            st.session_state[f"handover_jam_non_{idx}"] = str(row.get("jam", ""))
+                            st.session_state[f"handover_kirim_non_{idx}"] = str(row.get("kirim_pack", ""))
+                            st.session_state[f"handover_terima_non_{idx}"] = str(row.get("terima_pack", ""))
+                            st.session_state[f"handover_tl_non_{idx}"] = str(row.get("tl_packing", ""))
+                            st.session_state[f"handover_pic_non_{idx}"] = str(row.get("tl_kupas", row.get("pic_packing", "")))
+                            st.session_state[f"handover_alasan_non_{idx}"] = str(row.get("alasan_selisih", ""))
+                st.session_state[seed_handover_non_key] = True
 
             h1, h2, h3 = st.columns([2, 2, 6])
             with h1:
                 if st.button("+ Tambah", key="btn_add_handover"):
                     st.session_state["handover_rows_non"] = min(30, int(st.session_state.get("handover_rows_non", 1)) + 1)
-                    st.rerun()
             with h2:
                 if st.button("- Hapus", key="btn_del_handover"):
                     drop_last_row_from_session(
@@ -2866,7 +2873,6 @@ def main() -> None:
                         ],
                         min_rows=1,
                     )
-                    st.rerun()
             with h3:
                 pass
 
@@ -3078,30 +3084,32 @@ def main() -> None:
             )
             defrost_total_pack_auto = str(loaded_details.get("defrost_total_pack_auto", ""))
             if mode_defrost_st == "List baris":
-                loaded_defrost_rows_st = loaded_details.get("defrost_rows", [])
-                if isinstance(loaded_defrost_rows_st, list) and loaded_defrost_rows_st:
-                    existing_defrost_local_st = False
-                    for i in range(20):
-                        if str(st.session_state.get(f"def_jam_st_{i}", "")).strip() or str(
-                            st.session_state.get(f"def_isi_st_{i}", "")
-                        ).strip() or str(st.session_state.get(f"def_kg_st_{i}", "")).strip() or str(
-                            st.session_state.get(f"def_cat_st_{i}", "")
-                        ).strip():
-                            existing_defrost_local_st = True
-                            break
-                    if not existing_defrost_local_st:
-                        st.session_state["defrost_rows_st"] = min(20, max(1, len(loaded_defrost_rows_st)))
-                        for idx, row in enumerate(loaded_defrost_rows_st[:20]):
-                            st.session_state[f"def_no_st_{idx}"] = str(row.get("no", idx + 1))
-                            st.session_state[f"def_jam_st_{idx}"] = str(row.get("jam", ""))
-                            st.session_state[f"def_isi_st_{idx}"] = str(row.get("status", ""))
-                            st.session_state[f"def_kg_st_{idx}"] = str(row.get("pack", ""))
-                            st.session_state[f"def_cat_st_{idx}"] = str(row.get("catatan", ""))
+                seed_defrost_st_key = f"seed_defrost_st::{team_id}::{work_date}"
+                if not st.session_state.get(seed_defrost_st_key, False):
+                    loaded_defrost_rows_st = loaded_details.get("defrost_rows", [])
+                    if isinstance(loaded_defrost_rows_st, list) and loaded_defrost_rows_st:
+                        existing_defrost_local_st = False
+                        for i in range(20):
+                            if str(st.session_state.get(f"def_jam_st_{i}", "")).strip() or str(
+                                st.session_state.get(f"def_isi_st_{i}", "")
+                            ).strip() or str(st.session_state.get(f"def_kg_st_{i}", "")).strip() or str(
+                                st.session_state.get(f"def_cat_st_{i}", "")
+                            ).strip():
+                                existing_defrost_local_st = True
+                                break
+                        if not existing_defrost_local_st:
+                            st.session_state["defrost_rows_st"] = min(20, max(1, len(loaded_defrost_rows_st)))
+                            for idx, row in enumerate(loaded_defrost_rows_st[:20]):
+                                st.session_state[f"def_no_st_{idx}"] = str(row.get("no", idx + 1))
+                                st.session_state[f"def_jam_st_{idx}"] = str(row.get("jam", ""))
+                                st.session_state[f"def_isi_st_{idx}"] = str(row.get("status", ""))
+                                st.session_state[f"def_kg_st_{idx}"] = str(row.get("pack", ""))
+                                st.session_state[f"def_cat_st_{idx}"] = str(row.get("catatan", ""))
+                    st.session_state[seed_defrost_st_key] = True
                 d1, d2, d3 = st.columns([2, 2, 6])
                 with d1:
                     if st.button("+ Tambah", key="btn_add_defrost_st"):
                         st.session_state["defrost_rows_st"] = min(20, int(st.session_state.get("defrost_rows_st", 1)) + 1)
-                        st.rerun()
                 with d2:
                     if st.button("- Hapus", key="btn_del_defrost_st"):
                         drop_last_row_from_session(
@@ -3109,7 +3117,6 @@ def main() -> None:
                             ["def_jam_st_", "def_isi_st_", "def_kg_st_", "def_cat_st_"],
                             min_rows=1,
                         )
-                        st.rerun()
                 with d3:
                     pass
 
@@ -3208,33 +3215,35 @@ def main() -> None:
 
             st.markdown("### 2-2. Tempat buang pillow")
             st.caption("Tiap laporan: tambah 1 log (jam + O/X). Gunakan catatan hanya jika perlu.")
-            loaded_tempat_rows_st = loaded_details.get("tempat_buang_rows", [])
-            if isinstance(loaded_tempat_rows_st, list) and loaded_tempat_rows_st:
-                existing_tempat_local_st = False
-                for i in range(20):
-                    if str(st.session_state.get(f"tb_jam_st_{i}", "")).strip() or str(
-                        st.session_state.get(f"tb_status_st_{i}", "")
-                    ).strip() or str(st.session_state.get(f"tb_cat_st_{i}", "")).strip():
-                        existing_tempat_local_st = True
-                        break
-                if not existing_tempat_local_st:
-                    st.session_state["tempat_buang_rows_st"] = min(20, max(1, len(loaded_tempat_rows_st)))
-                    for idx, row in enumerate(loaded_tempat_rows_st[:20]):
-                        st.session_state[f"tb_jam_st_{idx}"] = str(row.get("jam", ""))
-                        st.session_state[f"tb_status_st_{idx}"] = str(row.get("status", ""))
-                        st.session_state[f"tb_cat_st_{idx}"] = str(row.get("catatan", ""))
-            elif str(loaded_details.get("tempat_buang_siap", "")).strip() or str(loaded_details.get("tempat_buang_check_time", "")).strip():
-                if not str(st.session_state.get("tb_jam_st_0", "")).strip() and not str(st.session_state.get("tb_status_st_0", "")).strip():
-                    st.session_state["tempat_buang_rows_st"] = 1
-                    st.session_state["tb_jam_st_0"] = str(loaded_details.get("tempat_buang_check_time", ""))
-                    st.session_state["tb_status_st_0"] = str(loaded_details.get("tempat_buang_siap", ""))
-                    st.session_state["tb_cat_st_0"] = ""
+            seed_tempat_st_key = f"seed_tempat_st::{team_id}::{work_date}"
+            if not st.session_state.get(seed_tempat_st_key, False):
+                loaded_tempat_rows_st = loaded_details.get("tempat_buang_rows", [])
+                if isinstance(loaded_tempat_rows_st, list) and loaded_tempat_rows_st:
+                    existing_tempat_local_st = False
+                    for i in range(20):
+                        if str(st.session_state.get(f"tb_jam_st_{i}", "")).strip() or str(
+                            st.session_state.get(f"tb_status_st_{i}", "")
+                        ).strip() or str(st.session_state.get(f"tb_cat_st_{i}", "")).strip():
+                            existing_tempat_local_st = True
+                            break
+                    if not existing_tempat_local_st:
+                        st.session_state["tempat_buang_rows_st"] = min(20, max(1, len(loaded_tempat_rows_st)))
+                        for idx, row in enumerate(loaded_tempat_rows_st[:20]):
+                            st.session_state[f"tb_jam_st_{idx}"] = str(row.get("jam", ""))
+                            st.session_state[f"tb_status_st_{idx}"] = str(row.get("status", ""))
+                            st.session_state[f"tb_cat_st_{idx}"] = str(row.get("catatan", ""))
+                elif str(loaded_details.get("tempat_buang_siap", "")).strip() or str(loaded_details.get("tempat_buang_check_time", "")).strip():
+                    if not str(st.session_state.get("tb_jam_st_0", "")).strip() and not str(st.session_state.get("tb_status_st_0", "")).strip():
+                        st.session_state["tempat_buang_rows_st"] = 1
+                        st.session_state["tb_jam_st_0"] = str(loaded_details.get("tempat_buang_check_time", ""))
+                        st.session_state["tb_status_st_0"] = str(loaded_details.get("tempat_buang_siap", ""))
+                        st.session_state["tb_cat_st_0"] = ""
+                st.session_state[seed_tempat_st_key] = True
 
             tb1, tb2, tb3 = st.columns([2, 2, 6])
             with tb1:
                 if st.button("+ Tambah", key="btn_add_tempat_st"):
                     st.session_state["tempat_buang_rows_st"] = min(20, int(st.session_state.get("tempat_buang_rows_st", 1)) + 1)
-                    st.rerun()
             with tb2:
                 if st.button("- Hapus", key="btn_del_tempat_st"):
                     drop_last_row_from_session(
@@ -3242,7 +3251,6 @@ def main() -> None:
                         ["tb_jam_st_", "tb_status_st_", "tb_cat_st_"],
                         min_rows=1,
                     )
-                    st.rerun()
             with tb3:
                 pass
 
@@ -3307,7 +3315,6 @@ def main() -> None:
                 with g1:
                     if st.button("+ Tambah", key="btn_add_giling_st"):
                         st.session_state["giling_rows_st"] = min(20, int(st.session_state.get("giling_rows_st", 1)) + 1)
-                        st.rerun()
                 with g2:
                     if st.button("- Hapus", key="btn_del_giling_st"):
                         drop_last_row_from_session(
@@ -3315,7 +3322,6 @@ def main() -> None:
                             ["gil_jam_st_", "gil_isi_st_", "gil_kg_st_", "gil_cat_st_"],
                             min_rows=1,
                         )
-                        st.rerun()
                 with g3:
                     pass
 
@@ -3378,29 +3384,31 @@ def main() -> None:
 
             st.markdown("### 3-2. Status Steril / Status Gas")
             st.caption("Isi log per batch: jam steril + batch + jumlah panci.")
-            loaded_steril_rows = loaded_details.get("steril_rows", [])
-            if isinstance(loaded_steril_rows, list) and loaded_steril_rows:
-                existing_steril_local = False
-                for i in range(30):
-                    if str(st.session_state.get(f"steril_jam_st_{i}", "")).strip() or str(
-                        st.session_state.get(f"steril_batch_st_{i}", "")
-                    ).strip() or str(st.session_state.get(f"steril_panci_st_{i}", "")).strip():
-                        existing_steril_local = True
-                        break
-                if not existing_steril_local:
-                    st.session_state["steril_rows_st"] = min(30, max(1, len(loaded_steril_rows)))
-                    for idx, row in enumerate(loaded_steril_rows[:30]):
-                        st.session_state[f"steril_no_st_{idx}"] = str(row.get("no", idx + 1))
-                        st.session_state[f"steril_jam_st_{idx}"] = str(row.get("jam", ""))
-                        st.session_state[f"steril_batch_st_{idx}"] = str(row.get("batch", ""))
-                        st.session_state[f"steril_panci_st_{idx}"] = str(row.get("panci", ""))
-                        st.session_state[f"steril_cat_st_{idx}"] = str(row.get("catatan", ""))
+            seed_steril_rows_key = f"seed_steril_rows::{team_id}::{work_date}"
+            if not st.session_state.get(seed_steril_rows_key, False):
+                loaded_steril_rows = loaded_details.get("steril_rows", [])
+                if isinstance(loaded_steril_rows, list) and loaded_steril_rows:
+                    existing_steril_local = False
+                    for i in range(30):
+                        if str(st.session_state.get(f"steril_jam_st_{i}", "")).strip() or str(
+                            st.session_state.get(f"steril_batch_st_{i}", "")
+                        ).strip() or str(st.session_state.get(f"steril_panci_st_{i}", "")).strip():
+                            existing_steril_local = True
+                            break
+                    if not existing_steril_local:
+                        st.session_state["steril_rows_st"] = min(30, max(1, len(loaded_steril_rows)))
+                        for idx, row in enumerate(loaded_steril_rows[:30]):
+                            st.session_state[f"steril_no_st_{idx}"] = str(row.get("no", idx + 1))
+                            st.session_state[f"steril_jam_st_{idx}"] = str(row.get("jam", ""))
+                            st.session_state[f"steril_batch_st_{idx}"] = str(row.get("batch", ""))
+                            st.session_state[f"steril_panci_st_{idx}"] = str(row.get("panci", ""))
+                            st.session_state[f"steril_cat_st_{idx}"] = str(row.get("catatan", ""))
+                st.session_state[seed_steril_rows_key] = True
 
             s1, s2, s3 = st.columns([2, 2, 6])
             with s1:
                 if st.button("+ Tambah", key="btn_add_steril_row_st"):
                     st.session_state["steril_rows_st"] = min(30, int(st.session_state.get("steril_rows_st", 1)) + 1)
-                    st.rerun()
             with s2:
                 if st.button("- Hapus", key="btn_del_steril_row_st"):
                     drop_last_row_from_session(
@@ -3408,7 +3416,6 @@ def main() -> None:
                         ["steril_no_st_", "steril_jam_st_", "steril_batch_st_", "steril_panci_st_", "steril_cat_st_"],
                         min_rows=1,
                     )
-                    st.rerun()
             with s3:
                 pass
 
@@ -3457,26 +3464,28 @@ def main() -> None:
             render_section_checkpoint_ui(team_id, str(work_date), report_type, "steril_status", "3-2 Steril/Gas")
 
             st.markdown("#### Total Steril (rincian)")
-            loaded_total_breakdown = loaded_details.get("total_steril_breakdown_rows", [])
-            if isinstance(loaded_total_breakdown, list) and loaded_total_breakdown:
-                existing_total_local = False
-                for i in range(15):
-                    if str(st.session_state.get(f"steril_total_qty_st_{i}", "")).strip() or str(
-                        st.session_state.get(f"steril_total_kg_st_{i}", "")
-                    ).strip():
-                        existing_total_local = True
-                        break
-                if not existing_total_local:
-                    st.session_state["steril_total_rows_st"] = min(15, max(1, len(loaded_total_breakdown)))
-                    for idx, row in enumerate(loaded_total_breakdown[:15]):
-                        st.session_state[f"steril_total_no_st_{idx}"] = str(row.get("no", idx + 1))
-                        st.session_state[f"steril_total_qty_st_{idx}"] = str(row.get("qty_panci", ""))
-                        st.session_state[f"steril_total_kg_st_{idx}"] = str(row.get("berat_kg", ""))
+            seed_total_breakdown_key = f"seed_steril_total::{team_id}::{work_date}"
+            if not st.session_state.get(seed_total_breakdown_key, False):
+                loaded_total_breakdown = loaded_details.get("total_steril_breakdown_rows", [])
+                if isinstance(loaded_total_breakdown, list) and loaded_total_breakdown:
+                    existing_total_local = False
+                    for i in range(15):
+                        if str(st.session_state.get(f"steril_total_qty_st_{i}", "")).strip() or str(
+                            st.session_state.get(f"steril_total_kg_st_{i}", "")
+                        ).strip():
+                            existing_total_local = True
+                            break
+                    if not existing_total_local:
+                        st.session_state["steril_total_rows_st"] = min(15, max(1, len(loaded_total_breakdown)))
+                        for idx, row in enumerate(loaded_total_breakdown[:15]):
+                            st.session_state[f"steril_total_no_st_{idx}"] = str(row.get("no", idx + 1))
+                            st.session_state[f"steril_total_qty_st_{idx}"] = str(row.get("qty_panci", ""))
+                            st.session_state[f"steril_total_kg_st_{idx}"] = str(row.get("berat_kg", ""))
+                st.session_state[seed_total_breakdown_key] = True
             tb1, tb2, tb3 = st.columns([2, 2, 6])
             with tb1:
                 if st.button("+ Tambah", key="btn_add_steril_total_st"):
                     st.session_state["steril_total_rows_st"] = min(15, int(st.session_state.get("steril_total_rows_st", 1)) + 1)
-                    st.rerun()
             with tb2:
                 if st.button("- Hapus", key="btn_del_steril_total_st"):
                     drop_last_row_from_session(
@@ -3484,7 +3493,6 @@ def main() -> None:
                         ["steril_total_no_st_", "steril_total_qty_st_", "steril_total_kg_st_"],
                         min_rows=1,
                     )
-                    st.rerun()
             with tb3:
                 pass
 
@@ -3526,26 +3534,28 @@ def main() -> None:
                     key=target_minutes_key_st,
                 )
             )
-            loaded_steril_check_rows = loaded_details.get("steril_check_rows", [])
-            if isinstance(loaded_steril_check_rows, list) and loaded_steril_check_rows:
-                existing_check_local = False
-                for i in range(30):
-                    if str(st.session_state.get(f"steril_check_batch_st_{i}", "")).strip() or str(
-                        st.session_state.get(f"steril_check_actual_st_{i}", "")
-                    ).strip():
-                        existing_check_local = True
-                        break
-                if not existing_check_local:
-                    st.session_state["steril_check_rows_st"] = min(30, max(1, len(loaded_steril_check_rows)))
-                    for idx, row in enumerate(loaded_steril_check_rows[:30]):
-                        st.session_state[f"steril_check_no_st_{idx}"] = str(row.get("no", idx + 1))
-                        st.session_state[f"steril_check_batch_st_{idx}"] = str(row.get("batch", ""))
-                        st.session_state[f"steril_check_actual_st_{idx}"] = str(row.get("jam_actual", ""))
+            seed_steril_check_key = f"seed_steril_check::{team_id}::{work_date}"
+            if not st.session_state.get(seed_steril_check_key, False):
+                loaded_steril_check_rows = loaded_details.get("steril_check_rows", [])
+                if isinstance(loaded_steril_check_rows, list) and loaded_steril_check_rows:
+                    existing_check_local = False
+                    for i in range(30):
+                        if str(st.session_state.get(f"steril_check_batch_st_{i}", "")).strip() or str(
+                            st.session_state.get(f"steril_check_actual_st_{i}", "")
+                        ).strip():
+                            existing_check_local = True
+                            break
+                    if not existing_check_local:
+                        st.session_state["steril_check_rows_st"] = min(30, max(1, len(loaded_steril_check_rows)))
+                        for idx, row in enumerate(loaded_steril_check_rows[:30]):
+                            st.session_state[f"steril_check_no_st_{idx}"] = str(row.get("no", idx + 1))
+                            st.session_state[f"steril_check_batch_st_{idx}"] = str(row.get("batch", ""))
+                            st.session_state[f"steril_check_actual_st_{idx}"] = str(row.get("jam_actual", ""))
+                st.session_state[seed_steril_check_key] = True
             c1, c2, c3 = st.columns([2, 2, 6])
             with c1:
                 if st.button("+ Tambah", key="btn_add_steril_check_st"):
                     st.session_state["steril_check_rows_st"] = min(30, int(st.session_state.get("steril_check_rows_st", 1)) + 1)
-                    st.rerun()
             with c2:
                 if st.button("- Hapus", key="btn_del_steril_check_st"):
                     drop_last_row_from_session(
@@ -3553,7 +3563,6 @@ def main() -> None:
                         ["steril_check_no_st_", "steril_check_batch_st_", "steril_check_actual_st_"],
                         min_rows=1,
                     )
-                    st.rerun()
             with c3:
                 pass
 
@@ -3618,28 +3627,30 @@ def main() -> None:
                 index=0 if loaded_details.get("cb_nyala", "O") == "O" else 1,
             )
             st.markdown("#### Jam produk masuk ke CB")
-            loaded_cb_rows = loaded_details.get("cb_rows", [])
-            if isinstance(loaded_cb_rows, list) and loaded_cb_rows:
-                existing_cb_local = False
-                for i in range(30):
-                    if str(st.session_state.get(f"cb_jam_st_{i}", "")).strip() or str(
-                        st.session_state.get(f"cb_batch_st_{i}", "")
-                    ).strip() or str(st.session_state.get(f"cb_panci_st_{i}", "")).strip():
-                        existing_cb_local = True
-                        break
-                if not existing_cb_local:
-                    st.session_state["cb_rows_st"] = min(30, max(1, len(loaded_cb_rows)))
-                    for idx, row in enumerate(loaded_cb_rows[:30]):
-                        st.session_state[f"cb_no_st_{idx}"] = str(row.get("no", idx + 1))
-                        st.session_state[f"cb_jam_st_{idx}"] = str(row.get("jam", ""))
-                        st.session_state[f"cb_batch_st_{idx}"] = str(row.get("batch", ""))
-                        st.session_state[f"cb_panci_st_{idx}"] = str(row.get("panci", ""))
-                        st.session_state[f"cb_cat_st_{idx}"] = str(row.get("catatan", ""))
+            seed_cb_rows_key = f"seed_cb_rows::{team_id}::{work_date}"
+            if not st.session_state.get(seed_cb_rows_key, False):
+                loaded_cb_rows = loaded_details.get("cb_rows", [])
+                if isinstance(loaded_cb_rows, list) and loaded_cb_rows:
+                    existing_cb_local = False
+                    for i in range(30):
+                        if str(st.session_state.get(f"cb_jam_st_{i}", "")).strip() or str(
+                            st.session_state.get(f"cb_batch_st_{i}", "")
+                        ).strip() or str(st.session_state.get(f"cb_panci_st_{i}", "")).strip():
+                            existing_cb_local = True
+                            break
+                    if not existing_cb_local:
+                        st.session_state["cb_rows_st"] = min(30, max(1, len(loaded_cb_rows)))
+                        for idx, row in enumerate(loaded_cb_rows[:30]):
+                            st.session_state[f"cb_no_st_{idx}"] = str(row.get("no", idx + 1))
+                            st.session_state[f"cb_jam_st_{idx}"] = str(row.get("jam", ""))
+                            st.session_state[f"cb_batch_st_{idx}"] = str(row.get("batch", ""))
+                            st.session_state[f"cb_panci_st_{idx}"] = str(row.get("panci", ""))
+                            st.session_state[f"cb_cat_st_{idx}"] = str(row.get("catatan", ""))
+                st.session_state[seed_cb_rows_key] = True
             cb1, cb2, cb3 = st.columns([2, 2, 6])
             with cb1:
                 if st.button("+ Tambah", key="btn_add_cb_row_st"):
                     st.session_state["cb_rows_st"] = min(30, int(st.session_state.get("cb_rows_st", 1)) + 1)
-                    st.rerun()
             with cb2:
                 if st.button("- Hapus", key="btn_del_cb_row_st"):
                     drop_last_row_from_session(
@@ -3647,7 +3658,6 @@ def main() -> None:
                         ["cb_no_st_", "cb_jam_st_", "cb_batch_st_", "cb_panci_st_", "cb_cat_st_"],
                         min_rows=1,
                     )
-                    st.rerun()
             with cb3:
                 pass
 
@@ -3744,18 +3754,19 @@ def main() -> None:
         submitted = st.button("Kirim Laporan", type="primary")
 
     prev_state_snapshot = load_work_state(team_id.strip(), str(work_date))
-    # Persist current working context after form render.
-    save_work_state(
-        team_id.strip() or "unknown",
-        str(work_date),
-        {
-            "team_id": team_id,
-            "shift": shift,
-            "pelapor": pelapor,
-            "report_type": report_type,
-            "details": details,
-        },
-    )
+    # Skip auto-save on row add/delete clicks to avoid overwriting draft with partial rerun state.
+    if not is_row_action_click():
+        save_work_state(
+            team_id.strip() or "unknown",
+            str(work_date),
+            {
+                "team_id": team_id,
+                "shift": shift,
+                "pelapor": pelapor,
+                "report_type": report_type,
+                "details": details,
+            },
+        )
 
     if submitted:
         common_form = {"team_id": team_id, "pelapor": pelapor, "shift": shift}
