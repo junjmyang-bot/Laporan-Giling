@@ -5,7 +5,7 @@ import uuid
 import ast
 import mimetypes
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib import error, request
@@ -253,6 +253,33 @@ def is_valid_hhmm(value: Any) -> bool:
         return True
     except Exception:
         return False
+
+
+def hhmm_plus_minutes(value: Any, minutes: int) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        base = datetime.strptime(raw, "%H:%M")
+        out = base + timedelta(minutes=int(minutes))
+        return out.strftime("%H:%M")
+    except Exception:
+        return ""
+
+
+def minutes_diff_hhmm(start_hhmm: Any, end_hhmm: Any) -> Optional[int]:
+    start_raw = str(start_hhmm or "").strip()
+    end_raw = str(end_hhmm or "").strip()
+    if not start_raw or not end_raw:
+        return None
+    try:
+        start_dt = datetime.strptime(start_raw, "%H:%M")
+        end_dt = datetime.strptime(end_raw, "%H:%M")
+        if end_dt < start_dt:
+            end_dt += timedelta(days=1)
+        return int((end_dt - start_dt).total_seconds() // 60)
+    except Exception:
+        return None
 
 
 def parse_name_lines(value: str) -> List[str]:
@@ -729,6 +756,67 @@ def render_steril_blocks(payload: Dict[str, Any]) -> List[str]:
         tempat_buang_lines = [
             f"-> {d.get('tempat_buang_siap', '-') or '-'} | Jam cek: {d.get('tempat_buang_check_time', '-') or '-'}"
         ]
+
+    steril_rows = d.get("steril_rows", [])
+    steril_lines: List[str] = []
+    steril_total_panci = 0.0
+    for idx, row in enumerate(steril_rows, start=1):
+        no = str(row.get("no", "")).strip() or str(idx)
+        jam = str(row.get("jam", "")).strip() or "-"
+        batch = str(row.get("batch", "")).strip() or "-"
+        panci = str(row.get("panci", "")).strip() or "-"
+        catatan = str(row.get("catatan", "")).strip()
+        panci_val = parse_optional_float(panci)
+        if panci_val is not None and panci_val >= 0:
+            steril_total_panci += panci_val
+        line = f"- [{no}] {jam} steril batch {batch} ({panci} panci)"
+        if catatan:
+            line += f" | {catatan}"
+        steril_lines.append(line)
+    if not steril_lines:
+        steril_fallback = str(d.get("status_steril", "")).strip()
+        steril_lines = [steril_fallback] if steril_fallback else ["- Belum ada log steril"]
+
+    total_breakdown_rows = d.get("total_steril_breakdown_rows", [])
+    total_breakdown_lines: List[str] = []
+    for row in total_breakdown_rows:
+        qty = str(row.get("qty_panci", "")).strip()
+        berat = str(row.get("berat_kg", "")).strip()
+        if qty and berat:
+            total_breakdown_lines.append(f"- {qty} panci @{berat}kg")
+        elif qty:
+            total_breakdown_lines.append(f"- {qty} panci")
+    if not total_breakdown_lines:
+        fallback_total = str(d.get("total_produk_steril", "")).strip()
+        total_breakdown_lines = [fallback_total] if fallback_total else ["- Belum ada rincian total steril"]
+
+    steril_check_rows = d.get("steril_check_rows", [])
+    steril_check_lines: List[str] = []
+    for idx, row in enumerate(steril_check_rows, start=1):
+        no = str(row.get("no", "")).strip() or str(idx)
+        batch = str(row.get("batch", "")).strip() or "-"
+        jam_target = str(row.get("jam_target", "")).strip() or "-"
+        jam_actual = str(row.get("jam_actual", "")).strip() or "-"
+        status = str(row.get("status", "")).strip() or "-"
+        steril_check_lines.append(f"- [{no}] batch {batch} | target {jam_target} | aktual {jam_actual} | {status}")
+    if not steril_check_lines:
+        steril_check_lines = ["- Belum ada cek jam steril"]
+
+    cb_rows = d.get("cb_rows", [])
+    cb_lines: List[str] = []
+    for idx, row in enumerate(cb_rows, start=1):
+        no = str(row.get("no", "")).strip() or str(idx)
+        jam = str(row.get("jam", "")).strip() or "-"
+        batch = str(row.get("batch", "")).strip() or "-"
+        panci = str(row.get("panci", "")).strip() or "-"
+        catatan = str(row.get("catatan", "")).strip()
+        line = f"- [{no}] {jam} cb batch {batch} ({panci} panci)"
+        if catatan:
+            line += f" | {catatan}"
+        cb_lines.append(line)
+    if not cb_lines:
+        cb_lines = ["- Belum ada log CB"]
+
     return [
         "\n".join(
             [
@@ -769,10 +857,28 @@ def render_steril_blocks(payload: Dict[str, Any]) -> List[str]:
         ),
         "\n".join(
             [
-                "3-2. STATUS STERIL / CB",
-                f"-> Total produk steril: {d.get('total_produk_steril', '-') or '-'}",
+                "3-2. STATUS STERIL / STATUS GAS",
+                *steril_lines,
+                f"-> Total panci steril (otomatis): {format_float_compact(steril_total_panci)} panci",
+                "-> Total Steril:",
+                *total_breakdown_lines,
+            ]
+        ),
+        "\n".join(
+            [
+                f"3-2-1. JAM STERIL SUDAH SESUAI? (Target: {d.get('steril_target_minutes', '75')} menit)",
+                *steril_check_lines,
+            ]
+        ),
+        "\n".join(
+            [
+                "3-3. STATUS COOLBATH (CB)",
                 f"-> CB siap: {d.get('cb_siap', '-') or '-'}",
                 f"-> CB dinyalakan: {d.get('cb_nyala', '-') or '-'}",
+                "-> Jam produk masuk ke CB:",
+                *cb_lines,
+                "-> Total Produk Steril:",
+                *total_breakdown_lines,
                 f"-> Produk diambil <=20 menit: {d.get('ambil_20_menit', '-') or '-'}",
                 f"-> Tidak ada sisa CB: {d.get('tidak_ada_sisa_cb', '-') or '-'}",
             ]
@@ -1230,6 +1336,121 @@ def validate_steril(details: Dict[str, Any]) -> List[str]:
         errs.append("2-1 Status defrost wajib diisi.")
     if not str(details.get("status_giling", "")).strip():
         errs.append("3-1 Status giling wajib diisi.")
+
+    steril_target_minutes = parse_optional_int(details.get("steril_target_minutes"), 75)
+    if steril_target_minutes <= 0:
+        errs.append("Target menit steril harus lebih dari 0.")
+
+    steril_rows = details.get("steril_rows", [])
+    active_steril_rows: List[Dict[str, Any]] = []
+    steril_start_by_batch: Dict[str, str] = {}
+    if isinstance(steril_rows, list):
+        for row in steril_rows:
+            jam = str(row.get("jam", "")).strip()
+            batch = str(row.get("batch", "")).strip()
+            panci = str(row.get("panci", "")).strip()
+            catatan = str(row.get("catatan", "")).strip()
+            if jam or batch or panci or catatan:
+                active_steril_rows.append(row)
+    if not active_steril_rows:
+        errs.append("3-2 Status steril/gas: isi minimal 1 log steril batch.")
+    else:
+        for idx, row in enumerate(active_steril_rows, start=1):
+            jam = str(row.get("jam", "")).strip()
+            batch = str(row.get("batch", "")).strip()
+            panci_raw = str(row.get("panci", "")).strip()
+            if not is_valid_hhmm(jam):
+                errs.append(f"3-2 log steril {idx}: jam wajib format HH:MM.")
+            if not batch:
+                errs.append(f"3-2 log steril {idx}: batch wajib diisi.")
+            panci_val = parse_optional_float(panci_raw)
+            if panci_val is None:
+                errs.append(f"3-2 log steril {idx}: jumlah panci wajib angka.")
+            elif panci_val <= 0:
+                errs.append(f"3-2 log steril {idx}: jumlah panci harus lebih dari 0.")
+            if batch and jam and is_valid_hhmm(jam) and batch not in steril_start_by_batch:
+                steril_start_by_batch[batch] = jam
+
+    steril_check_rows = details.get("steril_check_rows", [])
+    active_steril_check_rows: List[Dict[str, Any]] = []
+    if isinstance(steril_check_rows, list):
+        for row in steril_check_rows:
+            batch = str(row.get("batch", "")).strip()
+            jam_actual = str(row.get("jam_actual", "")).strip()
+            if batch or jam_actual:
+                active_steril_check_rows.append(row)
+    if active_steril_rows and not active_steril_check_rows:
+        errs.append("3-2-1 Jam steril sesuai: isi minimal 1 log cek jam steril.")
+    else:
+        for idx, row in enumerate(active_steril_check_rows, start=1):
+            batch = str(row.get("batch", "")).strip()
+            jam_actual = str(row.get("jam_actual", "")).strip()
+            if not batch:
+                errs.append(f"3-2-1 log cek {idx}: batch wajib diisi.")
+            if not is_valid_hhmm(jam_actual):
+                errs.append(f"3-2-1 log cek {idx}: jam aktual wajib format HH:MM.")
+            start_jam = steril_start_by_batch.get(batch, "")
+            if start_jam and is_valid_hhmm(jam_actual):
+                diff = minutes_diff_hhmm(start_jam, jam_actual)
+                if diff is not None and diff < steril_target_minutes:
+                    errs.append(
+                        f"3-2-1 log cek {idx}: durasi batch {batch} kurang dari target {steril_target_minutes} menit."
+                    )
+
+    total_rows = details.get("total_steril_breakdown_rows", [])
+    active_total_rows: List[Dict[str, Any]] = []
+    if isinstance(total_rows, list):
+        for row in total_rows:
+            qty = str(row.get("qty_panci", "")).strip()
+            berat = str(row.get("berat_kg", "")).strip()
+            if qty or berat:
+                active_total_rows.append(row)
+    if not active_total_rows:
+        errs.append("Isi minimal 1 rincian total steril (contoh: 72 panci @5kg).")
+    else:
+        for idx, row in enumerate(active_total_rows, start=1):
+            qty_val = parse_optional_float(row.get("qty_panci", ""))
+            berat_raw = str(row.get("berat_kg", "")).strip()
+            if qty_val is None or qty_val <= 0:
+                errs.append(f"Rincian total steril {idx}: jumlah panci wajib angka > 0.")
+            if not berat_raw:
+                errs.append(f"Rincian total steril {idx}: berat per panci wajib diisi.")
+
+    if details.get("cb_siap", "") not in {"O", "X"}:
+        errs.append("3-3 CB bersih + isi air wajib pilih O/X.")
+    if details.get("cb_nyala", "") not in {"O", "X"}:
+        errs.append("3-3 CB dinyalakan wajib pilih O/X.")
+    if details.get("ambil_20_menit", "") not in {"O", "X"}:
+        errs.append("3-3 Produk diambil <=20 menit wajib pilih O/X.")
+    if details.get("tidak_ada_sisa_cb", "") not in {"O", "X"}:
+        errs.append("3-3 Tidak ada sisa di CB wajib pilih O/X.")
+
+    cb_rows = details.get("cb_rows", [])
+    active_cb_rows: List[Dict[str, Any]] = []
+    if isinstance(cb_rows, list):
+        for row in cb_rows:
+            jam = str(row.get("jam", "")).strip()
+            batch = str(row.get("batch", "")).strip()
+            panci = str(row.get("panci", "")).strip()
+            catatan = str(row.get("catatan", "")).strip()
+            if jam or batch or panci or catatan:
+                active_cb_rows.append(row)
+    if not active_cb_rows:
+        errs.append("3-3 Status Coolbath: isi minimal 1 log jam produk masuk CB.")
+    else:
+        for idx, row in enumerate(active_cb_rows, start=1):
+            jam = str(row.get("jam", "")).strip()
+            batch = str(row.get("batch", "")).strip()
+            panci_raw = str(row.get("panci", "")).strip()
+            if not is_valid_hhmm(jam):
+                errs.append(f"3-3 log CB {idx}: jam wajib format HH:MM.")
+            if not batch:
+                errs.append(f"3-3 log CB {idx}: batch wajib diisi.")
+            panci_val = parse_optional_float(panci_raw)
+            if panci_val is None:
+                errs.append(f"3-3 log CB {idx}: jumlah panci wajib angka.")
+            elif panci_val <= 0:
+                errs.append(f"3-3 log CB {idx}: jumlah panci harus lebih dari 0.")
     return errs
 
 
@@ -3006,8 +3227,220 @@ def main() -> None:
             render_section_checkpoint_ui(team_id, str(work_date), report_type, "giling", "3-1 Giling")
             total_giling = st.text_input("Total Giling (berapa resep)", value=str(loaded_details.get("total_giling", "")), placeholder="contoh: 15")
 
-            st.markdown("### 3-2. Status Steril / CB (khusus)")
-            total_produk_steril = st.text_input("Total produk steril", value=loaded_details.get("total_produk_steril", ""))
+            st.markdown("### 3-2. Status Steril / Status Gas")
+            st.caption("Isi log per batch: jam steril + batch + jumlah panci.")
+            loaded_steril_rows = loaded_details.get("steril_rows", [])
+            if isinstance(loaded_steril_rows, list) and loaded_steril_rows:
+                existing_steril_local = False
+                for i in range(30):
+                    if str(st.session_state.get(f"steril_jam_st_{i}", "")).strip() or str(
+                        st.session_state.get(f"steril_batch_st_{i}", "")
+                    ).strip() or str(st.session_state.get(f"steril_panci_st_{i}", "")).strip():
+                        existing_steril_local = True
+                        break
+                if not existing_steril_local:
+                    st.session_state["steril_rows_st"] = min(30, max(1, len(loaded_steril_rows)))
+                    for idx, row in enumerate(loaded_steril_rows[:30]):
+                        st.session_state[f"steril_no_st_{idx}"] = str(row.get("no", idx + 1))
+                        st.session_state[f"steril_jam_st_{idx}"] = str(row.get("jam", ""))
+                        st.session_state[f"steril_batch_st_{idx}"] = str(row.get("batch", ""))
+                        st.session_state[f"steril_panci_st_{idx}"] = str(row.get("panci", ""))
+                        st.session_state[f"steril_cat_st_{idx}"] = str(row.get("catatan", ""))
+
+            s1, s2, s3 = st.columns([2, 2, 6])
+            with s1:
+                if st.button("+ Tambah log steril", key="btn_add_steril_row_st"):
+                    st.session_state["steril_rows_st"] = min(30, int(st.session_state.get("steril_rows_st", 1)) + 1)
+                    st.rerun()
+            with s2:
+                if st.button("- Hapus log steril", key="btn_del_steril_row_st"):
+                    st.session_state["steril_rows_st"] = max(1, int(st.session_state.get("steril_rows_st", 1)) - 1)
+                    st.rerun()
+            with s3:
+                st.caption(f"Jumlah log steril: {int(st.session_state.get('steril_rows_st', 1))}")
+
+            row_count_steril = ensure_row_count_from_session(
+                "steril_rows_st",
+                ["steril_no_st_", "steril_jam_st_", "steril_batch_st_", "steril_panci_st_", "steril_cat_st_"],
+                min_rows=1,
+                max_rows=30,
+            )
+            steril_rows: List[Dict[str, Any]] = []
+            steril_lines: List[str] = []
+            steril_start_map: Dict[str, str] = {}
+            sum_steril_panci = 0.0
+            invalid_steril_panci = 0
+            for idx in range(int(row_count_steril)):
+                sc0, sc1, sc2, sc3, sc4 = st.columns([1, 2, 2, 2, 3])
+                no_key = f"steril_no_st_{idx}"
+                if not str(st.session_state.get(no_key, "")).strip():
+                    st.session_state[no_key] = str(idx + 1)
+                no = sc0.text_input("No", key=no_key, max_chars=3)
+                jam = sc1.text_input("Jam steril", placeholder="08:20", key=f"steril_jam_st_{idx}")
+                batch = sc2.text_input("Batch", placeholder="1", key=f"steril_batch_st_{idx}")
+                panci = sc3.text_input("Panci", placeholder="17", key=f"steril_panci_st_{idx}")
+                cat = sc4.text_input("Catatan", placeholder="opsional", key=f"steril_cat_st_{idx}")
+                panci_val = parse_optional_float(panci)
+                if panci.strip():
+                    if panci_val is None:
+                        invalid_steril_panci += 1
+                    elif panci_val >= 0:
+                        sum_steril_panci += panci_val
+                if jam.strip() or batch.strip() or panci.strip() or cat.strip():
+                    steril_rows.append({"no": no, "jam": jam, "batch": batch, "panci": panci, "catatan": cat})
+                    line = f"- {(f'[{no.strip()}] ' if no.strip() else '')}{jam.strip() or '-'} steril batch {batch.strip() or '-'} ({panci.strip() or '-'} panci)"
+                    if cat.strip():
+                        line += f" | {cat.strip()}"
+                    steril_lines.append(line)
+                    if batch.strip() and jam.strip() and is_valid_hhmm(jam):
+                        steril_start_map.setdefault(batch.strip(), jam.strip())
+            status_steril = "\n".join(steril_lines).strip()
+            st.caption("Preview status steril/gas")
+            st.code(status_steril or "- Belum ada log steril")
+            steril_total_panci_auto = format_float_compact(sum_steril_panci)
+            st.text_input("Total panci steril (otomatis)", value=steril_total_panci_auto, disabled=True)
+            if invalid_steril_panci > 0:
+                st.warning(f"Ada {invalid_steril_panci} nilai panci steril yang bukan angka, tidak dihitung.")
+            render_section_checkpoint_ui(team_id, str(work_date), report_type, "steril_status", "3-2 Steril/Gas")
+
+            st.markdown("#### Total Steril (rincian)")
+            loaded_total_breakdown = loaded_details.get("total_steril_breakdown_rows", [])
+            if isinstance(loaded_total_breakdown, list) and loaded_total_breakdown:
+                existing_total_local = False
+                for i in range(15):
+                    if str(st.session_state.get(f"steril_total_qty_st_{i}", "")).strip() or str(
+                        st.session_state.get(f"steril_total_kg_st_{i}", "")
+                    ).strip():
+                        existing_total_local = True
+                        break
+                if not existing_total_local:
+                    st.session_state["steril_total_rows_st"] = min(15, max(1, len(loaded_total_breakdown)))
+                    for idx, row in enumerate(loaded_total_breakdown[:15]):
+                        st.session_state[f"steril_total_no_st_{idx}"] = str(row.get("no", idx + 1))
+                        st.session_state[f"steril_total_qty_st_{idx}"] = str(row.get("qty_panci", ""))
+                        st.session_state[f"steril_total_kg_st_{idx}"] = str(row.get("berat_kg", ""))
+            tb1, tb2, tb3 = st.columns([2, 2, 6])
+            with tb1:
+                if st.button("+ Tambah rincian total", key="btn_add_steril_total_st"):
+                    st.session_state["steril_total_rows_st"] = min(15, int(st.session_state.get("steril_total_rows_st", 1)) + 1)
+                    st.rerun()
+            with tb2:
+                if st.button("- Hapus rincian total", key="btn_del_steril_total_st"):
+                    st.session_state["steril_total_rows_st"] = max(1, int(st.session_state.get("steril_total_rows_st", 1)) - 1)
+                    st.rerun()
+            with tb3:
+                st.caption(f"Jumlah rincian total: {int(st.session_state.get('steril_total_rows_st', 1))}")
+            row_count_total = ensure_row_count_from_session(
+                "steril_total_rows_st",
+                ["steril_total_no_st_", "steril_total_qty_st_", "steril_total_kg_st_"],
+                min_rows=1,
+                max_rows=15,
+            )
+            total_steril_breakdown_rows: List[Dict[str, Any]] = []
+            total_steril_breakdown_lines: List[str] = []
+            for idx in range(int(row_count_total)):
+                tc0, tc1, tc2 = st.columns([1, 2, 2])
+                no_key = f"steril_total_no_st_{idx}"
+                if not str(st.session_state.get(no_key, "")).strip():
+                    st.session_state[no_key] = str(idx + 1)
+                no = tc0.text_input("No", key=no_key, max_chars=3)
+                qty = tc1.text_input("Jumlah panci", placeholder="72", key=f"steril_total_qty_st_{idx}")
+                berat = tc2.text_input("Berat/panci (kg)", placeholder="5", key=f"steril_total_kg_st_{idx}")
+                if qty.strip() or berat.strip():
+                    total_steril_breakdown_rows.append({"no": no, "qty_panci": qty, "berat_kg": berat})
+                    if qty.strip() and berat.strip():
+                        total_steril_breakdown_lines.append(f"- {qty.strip()} panci @{berat.strip()}kg")
+                    elif qty.strip():
+                        total_steril_breakdown_lines.append(f"- {qty.strip()} panci")
+            total_steril_breakdown_text = "\n".join(total_steril_breakdown_lines).strip()
+            st.code(total_steril_breakdown_text or "- Belum ada rincian total steril")
+
+            st.markdown("### 3-2-1. Jam steril sudah sesuai?")
+            target_minutes_key_st = f"steril_target_minutes_st::{team_id}::{work_date}"
+            if target_minutes_key_st not in st.session_state:
+                st.session_state[target_minutes_key_st] = int(parse_optional_int(loaded_details.get("steril_target_minutes"), 75))
+            steril_target_minutes = int(
+                st.number_input(
+                    "Target steril (menit)",
+                    min_value=1,
+                    max_value=300,
+                    step=5,
+                    key=target_minutes_key_st,
+                )
+            )
+            loaded_steril_check_rows = loaded_details.get("steril_check_rows", [])
+            if isinstance(loaded_steril_check_rows, list) and loaded_steril_check_rows:
+                existing_check_local = False
+                for i in range(30):
+                    if str(st.session_state.get(f"steril_check_batch_st_{i}", "")).strip() or str(
+                        st.session_state.get(f"steril_check_actual_st_{i}", "")
+                    ).strip():
+                        existing_check_local = True
+                        break
+                if not existing_check_local:
+                    st.session_state["steril_check_rows_st"] = min(30, max(1, len(loaded_steril_check_rows)))
+                    for idx, row in enumerate(loaded_steril_check_rows[:30]):
+                        st.session_state[f"steril_check_no_st_{idx}"] = str(row.get("no", idx + 1))
+                        st.session_state[f"steril_check_batch_st_{idx}"] = str(row.get("batch", ""))
+                        st.session_state[f"steril_check_actual_st_{idx}"] = str(row.get("jam_actual", ""))
+            c1, c2, c3 = st.columns([2, 2, 6])
+            with c1:
+                if st.button("+ Tambah cek jam steril", key="btn_add_steril_check_st"):
+                    st.session_state["steril_check_rows_st"] = min(30, int(st.session_state.get("steril_check_rows_st", 1)) + 1)
+                    st.rerun()
+            with c2:
+                if st.button("- Hapus cek jam steril", key="btn_del_steril_check_st"):
+                    st.session_state["steril_check_rows_st"] = max(1, int(st.session_state.get("steril_check_rows_st", 1)) - 1)
+                    st.rerun()
+            with c3:
+                st.caption(f"Jumlah cek jam steril: {int(st.session_state.get('steril_check_rows_st', 1))}")
+
+            row_count_check = ensure_row_count_from_session(
+                "steril_check_rows_st",
+                ["steril_check_no_st_", "steril_check_batch_st_", "steril_check_actual_st_"],
+                min_rows=1,
+                max_rows=30,
+            )
+            steril_check_rows: List[Dict[str, Any]] = []
+            steril_check_lines: List[str] = []
+            for idx in range(int(row_count_check)):
+                cc0, cc1, cc2, cc3, cc4 = st.columns([1, 2, 2, 2, 1])
+                no_key = f"steril_check_no_st_{idx}"
+                if not str(st.session_state.get(no_key, "")).strip():
+                    st.session_state[no_key] = str(idx + 1)
+                no = cc0.text_input("No", key=no_key, max_chars=3)
+                batch = cc1.text_input("Batch", placeholder=str(idx + 1), key=f"steril_check_batch_st_{idx}")
+                jam_target = hhmm_plus_minutes(steril_start_map.get(batch.strip(), ""), steril_target_minutes)
+                cc2.text_input("Jam target", value=jam_target, disabled=True, key=f"steril_check_target_view_st_{idx}")
+                jam_actual = cc3.text_input("Jam aktual", placeholder="09:35", key=f"steril_check_actual_st_{idx}")
+                status_check = "-"
+                diff_min = minutes_diff_hhmm(steril_start_map.get(batch.strip(), ""), jam_actual)
+                if diff_min is not None:
+                    status_check = "O" if diff_min >= steril_target_minutes else "X"
+                cc4.text_input("Status", value=status_check, disabled=True, key=f"steril_check_status_view_st_{idx}")
+                if batch.strip() or jam_actual.strip():
+                    steril_check_rows.append(
+                        {
+                            "no": no,
+                            "batch": batch,
+                            "jam_target": jam_target,
+                            "jam_actual": jam_actual,
+                            "status": status_check,
+                        }
+                    )
+                    if diff_min is not None:
+                        steril_check_lines.append(
+                            f"- {(f'[{no.strip()}] ' if no.strip() else '')}batch {batch.strip() or '-'} | target {jam_target or '-'} | aktual {jam_actual.strip() or '-'} | {status_check} ({diff_min} menit)"
+                        )
+                    else:
+                        steril_check_lines.append(
+                            f"- {(f'[{no.strip()}] ' if no.strip() else '')}batch {batch.strip() or '-'} | target {jam_target or '-'} | aktual {jam_actual.strip() or '-'} | -"
+                        )
+            st.caption("Ringkasan cek jam steril")
+            st.code("\n".join(steril_check_lines) if steril_check_lines else "- Belum ada cek jam steril")
+            render_section_checkpoint_ui(team_id, str(work_date), report_type, "steril_check", "3-2-1 Cek jam steril")
+
+            st.markdown("### 3-3. Status Coolbath (CB)")
             cb_siap = st.selectbox(
                 "CB sudah dibersihkan dan isi air?",
                 options=["O", "X"],
@@ -3018,6 +3451,64 @@ def main() -> None:
                 options=["O", "X"],
                 index=0 if loaded_details.get("cb_nyala", "O") == "O" else 1,
             )
+            st.markdown("#### Jam produk masuk ke CB")
+            loaded_cb_rows = loaded_details.get("cb_rows", [])
+            if isinstance(loaded_cb_rows, list) and loaded_cb_rows:
+                existing_cb_local = False
+                for i in range(30):
+                    if str(st.session_state.get(f"cb_jam_st_{i}", "")).strip() or str(
+                        st.session_state.get(f"cb_batch_st_{i}", "")
+                    ).strip() or str(st.session_state.get(f"cb_panci_st_{i}", "")).strip():
+                        existing_cb_local = True
+                        break
+                if not existing_cb_local:
+                    st.session_state["cb_rows_st"] = min(30, max(1, len(loaded_cb_rows)))
+                    for idx, row in enumerate(loaded_cb_rows[:30]):
+                        st.session_state[f"cb_no_st_{idx}"] = str(row.get("no", idx + 1))
+                        st.session_state[f"cb_jam_st_{idx}"] = str(row.get("jam", ""))
+                        st.session_state[f"cb_batch_st_{idx}"] = str(row.get("batch", ""))
+                        st.session_state[f"cb_panci_st_{idx}"] = str(row.get("panci", ""))
+                        st.session_state[f"cb_cat_st_{idx}"] = str(row.get("catatan", ""))
+            cb1, cb2, cb3 = st.columns([2, 2, 6])
+            with cb1:
+                if st.button("+ Tambah log CB", key="btn_add_cb_row_st"):
+                    st.session_state["cb_rows_st"] = min(30, int(st.session_state.get("cb_rows_st", 1)) + 1)
+                    st.rerun()
+            with cb2:
+                if st.button("- Hapus log CB", key="btn_del_cb_row_st"):
+                    st.session_state["cb_rows_st"] = max(1, int(st.session_state.get("cb_rows_st", 1)) - 1)
+                    st.rerun()
+            with cb3:
+                st.caption(f"Jumlah log CB: {int(st.session_state.get('cb_rows_st', 1))}")
+            row_count_cb = ensure_row_count_from_session(
+                "cb_rows_st",
+                ["cb_no_st_", "cb_jam_st_", "cb_batch_st_", "cb_panci_st_", "cb_cat_st_"],
+                min_rows=1,
+                max_rows=30,
+            )
+            cb_rows: List[Dict[str, Any]] = []
+            cb_lines: List[str] = []
+            for idx in range(int(row_count_cb)):
+                cbc0, cbc1, cbc2, cbc3, cbc4 = st.columns([1, 2, 2, 2, 3])
+                no_key = f"cb_no_st_{idx}"
+                if not str(st.session_state.get(no_key, "")).strip():
+                    st.session_state[no_key] = str(idx + 1)
+                no = cbc0.text_input("No", key=no_key, max_chars=3)
+                jam = cbc1.text_input("Jam masuk CB", placeholder="09:55", key=f"cb_jam_st_{idx}")
+                batch = cbc2.text_input("Batch", placeholder="1", key=f"cb_batch_st_{idx}")
+                panci = cbc3.text_input("Panci", placeholder="17", key=f"cb_panci_st_{idx}")
+                cat = cbc4.text_input("Catatan", placeholder="opsional", key=f"cb_cat_st_{idx}")
+                if jam.strip() or batch.strip() or panci.strip() or cat.strip():
+                    cb_rows.append({"no": no, "jam": jam, "batch": batch, "panci": panci, "catatan": cat})
+                    line = f"- {(f'[{no.strip()}] ' if no.strip() else '')}{jam.strip() or '-'} cb batch {batch.strip() or '-'} ({panci.strip() or '-'} panci)"
+                    if cat.strip():
+                        line += f" | {cat.strip()}"
+                    cb_lines.append(line)
+            st.caption("Ringkasan log CB")
+            st.code("\n".join(cb_lines) if cb_lines else "- Belum ada log CB")
+            st.markdown("#### Total Produk Steril")
+            total_produk_steril = total_steril_breakdown_text
+            st.code(total_produk_steril or "- Belum ada rincian total produk steril")
             ambil_20_menit = st.selectbox(
                 "Produk diambil packing <=20 menit?",
                 options=["O", "X"],
@@ -3028,6 +3519,7 @@ def main() -> None:
                 options=["O", "X"],
                 index=0 if loaded_details.get("tidak_ada_sisa_cb", "O") == "O" else 1,
             )
+            render_section_checkpoint_ui(team_id, str(work_date), report_type, "coolbath", "3-3 Coolbath")
             catatan = st.text_area("Catatan tambahan", value=loaded_details.get("catatan", ""))
 
             details = {
@@ -3055,6 +3547,14 @@ def main() -> None:
                 "giling_total_resep_auto": giling_total_resep_auto,
                 "giling_total_pack_auto": giling_total_resep_auto,
                 "total_giling": total_giling,
+                "status_steril": status_steril,
+                "steril_rows": steril_rows,
+                "total_panci_steril_auto": steril_total_panci_auto,
+                "total_steril_breakdown_rows": total_steril_breakdown_rows,
+                "total_steril_breakdown_text": total_steril_breakdown_text,
+                "steril_target_minutes": str(steril_target_minutes),
+                "steril_check_rows": steril_check_rows,
+                "cb_rows": cb_rows,
                 "total_produk_steril": total_produk_steril,
                 "cb_siap": cb_siap,
                 "cb_nyala": cb_nyala,
