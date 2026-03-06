@@ -331,16 +331,6 @@ def drop_last_row_from_session(
     st.session_state[count_key] = current - 1
 
 
-def is_row_action_click() -> bool:
-    for key, value in st.session_state.items():
-        if not isinstance(key, str):
-            continue
-        if key.startswith("btn_add_") or key.startswith("btn_del_"):
-            if bool(value):
-                return True
-    return False
-
-
 def normalize_giling_status_input(
     raw_status: str,
     next_batch: int,
@@ -3754,19 +3744,18 @@ def main() -> None:
         submitted = st.button("Kirim Laporan", type="primary")
 
     prev_state_snapshot = load_work_state(team_id.strip(), str(work_date))
-    # Skip auto-save on row add/delete clicks to avoid overwriting draft with partial rerun state.
-    if not is_row_action_click():
-        save_work_state(
-            team_id.strip() or "unknown",
-            str(work_date),
-            {
-                "team_id": team_id,
-                "shift": shift,
-                "pelapor": pelapor,
-                "report_type": report_type,
-                "details": details,
-            },
-        )
+    # Persist current working context after form render (for refresh recovery).
+    save_work_state(
+        team_id.strip() or "unknown",
+        str(work_date),
+        {
+            "team_id": team_id,
+            "shift": shift,
+            "pelapor": pelapor,
+            "report_type": report_type,
+            "details": details,
+        },
+    )
 
     if submitted:
         common_form = {"team_id": team_id, "pelapor": pelapor, "shift": shift}
