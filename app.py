@@ -1671,6 +1671,8 @@ def main() -> None:
         st.session_state["vacum_defect_rows_non"] = 1
     if "handover_rows_non" not in st.session_state:
         st.session_state["handover_rows_non"] = 1
+    if "loaded_scope_key" not in st.session_state:
+        st.session_state["loaded_scope_key"] = ""
 
     with st.container(border=True):
         st.markdown("**Header**")
@@ -1740,6 +1742,27 @@ def main() -> None:
     if st.session_state.get("authenticated_scope") != scope:
         st.warning("Masukkan PIN lalu tekan 'Buka Tim' untuk mulai isi laporan.")
         st.stop()
+
+    if st.session_state.get("loaded_scope_key", "") != scope:
+        loaded_scope_state = load_work_state(team_scope, str(work_date_scope))
+        loaded_scope_report_type = ""
+        loaded_scope_details: Dict[str, Any] = {}
+        if isinstance(loaded_scope_state, dict):
+            loaded_scope_report_type = str(loaded_scope_state.get("report_type", "")).strip()
+            loaded_scope_details_raw = loaded_scope_state.get("details", {})
+            if isinstance(loaded_scope_details_raw, dict):
+                loaded_scope_details = loaded_scope_details_raw
+            loaded_shift = str(loaded_scope_state.get("shift", "")).strip()
+            loaded_pelapor = str(loaded_scope_state.get("pelapor", "")).strip()
+            if loaded_shift in {"1", "2", "3"}:
+                st.session_state["shift"] = loaded_shift
+            if loaded_pelapor:
+                st.session_state["pelapor"] = loaded_pelapor
+        if loaded_scope_report_type in {"non_steril", "steril_required"}:
+            st.session_state["report_type_confirmed"] = loaded_scope_report_type
+            st.session_state["report_type"] = loaded_scope_report_type
+        st.session_state["loaded_details"] = loaded_scope_details
+        st.session_state["loaded_scope_key"] = scope
 
     lock_now = read_lock(team_scope, str(work_date_scope))
     if lock_now:
