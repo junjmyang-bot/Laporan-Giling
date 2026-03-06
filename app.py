@@ -1,6 +1,7 @@
 ﻿import json
 import os
 import secrets
+import threading
 import uuid
 import ast
 import mimetypes
@@ -100,8 +101,13 @@ def load_json(path: Path, fallback: Any) -> Any:
         return fallback
 
 
+_SAVE_LOCK = threading.RLock()
+
 def save_json(path: Path, payload: Any) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    with _SAVE_LOCK:
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
 
 
 def now_local() -> datetime:
@@ -477,7 +483,7 @@ def chunk_sections(sections: List[str], safe_limit: int) -> List[str]:
     def flush() -> None:
         nonlocal current, current_len
         if current:
-            parts.append("\n".join(current).strip())
+            parts.append("\n\n".join(current).strip())
             current = []
             current_len = 0
 
@@ -672,10 +678,30 @@ def _clean_text_lines(text: Any) -> List[str]:
         if not line:
             continue
         line = re.sub(r"^\s*-\s*\[\d+\]\s*", "- ", line)
+        line = re.sub(r"^-\s*(\d{3,4})(?=\s)", lambda m: f"- {_fmt_jam(m.group(1))}", line)
+        line = re.sub(r"^(\d{3,4})(?=\s)", lambda m: _fmt_jam(m.group(1)), line)
         if line in {"-", "- -"}:
             continue
         lines.append(line)
     return lines
+
+
+def _normalize_unit_value(value: Any, unit: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "-"
+    cleaned = re.sub(rf"\s*{re.escape(unit)}\s*$", "", raw, flags=re.IGNORECASE).strip()
+    if not cleaned:
+        return "-"
+    return f"{cleaned} {unit}"
+
+
+def _prefer_auto_total(manual: Any, auto: Any) -> str:
+    manual_s = str(manual or "").strip()
+    auto_s = str(auto or "").strip()
+    if _is_placeholder(manual_s) and not _is_placeholder(auto_s):
+        return auto_s
+    return manual_s or auto_s or "-"
 
 
 def _defrost_lines(details: Dict[str, Any]) -> List[str]:
@@ -801,14 +827,16 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
                 line += f" | alasan: {alasan}"
             handover_lines.append(line)
 
-    total_giling = str(d.get("total_giling", "")).strip() or str(d.get("giling_total_resep_auto", "")).strip() or "-"
-    total_vacum = str(d.get("total_hasil_vakum", "")).strip() or str(d.get("vacum_total_pack_auto", "")).strip() or "-"
+    total_giling = _prefer_auto_total(d.get("total_giling", ""), d.get("giling_total_resep_auto", ""))
+    total_giling = re.sub(r"\s*resep\s*$", "", total_giling, flags=re.IGNORECASE).strip() or "-"
+    total_vacum = _prefer_auto_total(d.get("total_hasil_vakum", ""), d.get("vacum_total_pack_auto", ""))
+    total_vacum = re.sub(r"\s*pack\s*$", "", total_vacum, flags=re.IGNORECASE).strip() or "-"
 
     return [
         "\n".join(
             [
                 f"1. Produk : {_v(d.get('produk'))}",
-                f"- Jam kerja : {_v(d.get('jam_kerja_mulai'))} - {_v(d.get('jam_kerja_selesai'))}",
+                f"Jam kerja : {_v(d.get('jam_kerja_mulai'))} - {_v(d.get('jam_kerja_selesai'))}",
                 f"1-2. Jumlah isi barang dalam pillow : {_v(d.get('isi_pillow_kg'))}",
                 f"1-3. Nama petugas : {nama_petugas_txt}",
                 f"1-4. Timer ada ? : {_v(d.get('timer_ada'))}",
@@ -821,9 +849,9 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
                 "(Kalau sudah habis dipakai, tulis habis)",
                 *defrost_lines,
                 f"-> Total barang beku di ambil : {_v(d.get('total_beku'))}",
-                f"-> Total bb fresh dipakai : {_v(d.get('total_fresh_kg', '0'))}kg",
-                f"-> Total bb dibuang : {_v(d.get('total_buang_kg', '0'))}kg",
-                f"-> Total : {_v(d.get('total_akhir_kg', '0'))}kg (Barang beku + bb fresh - bb dibuang)",
+                f"-> Total bb fresh dipakai : {_normalize_unit_value(d.get('total_fresh_kg', '0'), 'kg')}",
+                f"-> Total bb dibuang : {_normalize_unit_value(d.get('total_buang_kg', '0'), 'kg')}",
+                f"-> Total : {_normalize_unit_value(d.get('total_akhir_kg', '0'), 'kg')} (Barang beku + bb fresh - bb dibuang)",
             ]
         ),
         "\n".join(
@@ -1153,6 +1181,8 @@ def submit_payload(payload: Dict[str, Any]) -> SubmitResult:
         mark_success(key, ids, payload)
         remove_pending(key)
         set_root_message_ids(payload.get("team_id", ""), payload.get("work_date", ""), payload.get("report_type", ""), ids)
+        if not sheets_ok:
+            print(f"[WARN] Sheets backup gagal: {sh_err}")
     else:
         err = f"telegram={telegram_ok}:{tg_err} | sheets={sheets_ok}:{sh_err}"
         enqueue_pending(payload, err)
@@ -1166,7 +1196,9 @@ def submit_payload(payload: Dict[str, Any]) -> SubmitResult:
 
 
 def retry_pending() -> Tuple[int, int]:
+    MAX_RETRY = 5
     queue = load_json(PENDING_FILE, [])
+    queue = [x for x in queue if x.get("retry_count", 0) < MAX_RETRY]
     if not queue:
         return 0, 0
 
@@ -3886,6 +3918,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 
 
 
