@@ -1031,21 +1031,21 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
             tl_kupas = str(row.get("tl_kupas", row.get("pic_packing", ""))).strip()
             alasan = str(row.get("alasan_selisih", "")).strip()
             if not jam:
-                errs.append(f"Baris handover #{idx}: jam wajib diisi.")
+                errs.append(f"Baris handover {idx}: jam wajib diisi.")
             if kirim is None:
-                errs.append(f"Baris handover #{idx}: total dikirim wajib angka.")
+                errs.append(f"Baris handover {idx}: total dikirim wajib angka.")
             if terima is None:
-                errs.append(f"Baris handover #{idx}: total diterima wajib angka.")
+                errs.append(f"Baris handover {idx}: total diterima wajib angka.")
             if not tl_packing:
-                errs.append(f"Baris handover #{idx}: nama TL packing wajib diisi.")
+                errs.append(f"Baris handover {idx}: nama TL packing wajib diisi.")
             if not tl_kupas:
-                errs.append(f"Baris handover #{idx}: nama TL kupas wajib diisi.")
+                errs.append(f"Baris handover {idx}: nama TL kupas wajib diisi.")
             if kirim is not None and terima is not None:
                 if kirim < 0 or terima < 0:
-                    errs.append(f"Baris handover #{idx}: nilai tidak boleh negatif.")
+                    errs.append(f"Baris handover {idx}: nilai tidak boleh negatif.")
                 selisih = kirim - terima
                 if abs(selisih) > 0.001 and not alasan:
-                    errs.append(f"Baris handover #{idx}: ada selisih, alasan wajib diisi.")
+                    errs.append(f"Baris handover {idx}: ada selisih, alasan wajib diisi.")
     tempat_rows = details.get("tempat_buang_rows", [])
     active_tempat_rows: List[Dict[str, Any]] = []
     if isinstance(tempat_rows, list):
@@ -1060,9 +1060,9 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
             jam = str(row.get("jam", "")).strip()
             status = str(row.get("status", "")).strip()
             if status not in {"O", "X"}:
-                errs.append(f"2-2 log #{idx}: status wajib O atau X.")
+                errs.append(f"2-2 log {idx}: status wajib O atau X.")
             if not is_valid_hhmm(jam):
-                errs.append(f"2-2 log #{idx}: jam wajib format HH:MM.")
+                errs.append(f"2-2 log {idx}: jam wajib format HH:MM.")
     else:
         if details.get("tempat_buang_siap", "") not in {"O", "X"}:
             errs.append("2-2 wajib dipilih O atau X pada setiap laporan.")
@@ -1085,11 +1085,11 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
             status = str(row.get("status", "")).strip()
             detail = str(row.get("detail", "")).strip()
             if not jam:
-                errs.append(f"Log delay giling #{idx}: jam wajib diisi.")
+                errs.append(f"Log delay giling {idx}: jam wajib diisi.")
             if status not in {"O", "X"}:
-                errs.append(f"Log delay giling #{idx}: status wajib O atau X.")
+                errs.append(f"Log delay giling {idx}: status wajib O atau X.")
             if status == "O" and not detail:
-                errs.append(f"Log delay giling #{idx}: detail wajib diisi jika status O.")
+                errs.append(f"Log delay giling {idx}: detail wajib diisi jika status O.")
 
     total_vacum = parse_optional_float(details.get("total_hasil_vakum"))
     total_vacum_defect = parse_optional_float(details.get("total_vacum_defect_pack"))
@@ -1110,12 +1110,12 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
             has_defect_row = True
             jumlah_val = parse_optional_float(jumlah_raw)
             if not jenis:
-                errs.append(f"Barang ada masalah vacum #{idx} wajib diisi.")
+                errs.append(f"Barang ada masalah vacum {idx} wajib diisi.")
             if jumlah_val is None:
-                errs.append(f"Jumlah pack barang bermasalah vacum #{idx} wajib angka.")
+                errs.append(f"Jumlah pack barang bermasalah vacum {idx} wajib angka.")
                 continue
             if jumlah_val < 0:
-                errs.append(f"Jumlah pack barang bermasalah vacum #{idx} tidak boleh negatif.")
+                errs.append(f"Jumlah pack barang bermasalah vacum {idx} tidak boleh negatif.")
                 continue
             defect_sum_from_rows += jumlah_val
 
@@ -1154,19 +1154,19 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
             kirim_status = str(row.get("kirim_status", "")).strip()
             pic_cek = str(row.get("pic_cek", "")).strip()
             if not jam:
-                errs.append(f"Log operasional vacum #{idx}: jam wajib diisi.")
+                errs.append(f"Log operasional vacum {idx}: jam wajib diisi.")
             if antrian_status not in {"O", "X"}:
-                errs.append(f"Log operasional vacum #{idx}: status antrian wajib O/X.")
+                errs.append(f"Log operasional vacum {idx}: status antrian wajib O/X.")
             if antrian_status == "O" and not antrian_detail:
-                errs.append(f"Log operasional vacum #{idx}: detail antrian wajib diisi jika status O.")
+                errs.append(f"Log operasional vacum {idx}: detail antrian wajib diisi jika status O.")
             if mesin_status not in {"O", "X"}:
-                errs.append(f"Log operasional vacum #{idx}: status mesin wajib O/X.")
+                errs.append(f"Log operasional vacum {idx}: status mesin wajib O/X.")
             if mesin_status == "X" and not mesin_detail:
-                errs.append(f"Log operasional vacum #{idx}: detail mesin wajib diisi jika status X.")
+                errs.append(f"Log operasional vacum {idx}: detail mesin wajib diisi jika status X.")
             if kirim_status not in {"O", "X"}:
-                errs.append(f"Log operasional vacum #{idx}: status kirim wajib O/X.")
+                errs.append(f"Log operasional vacum {idx}: status kirim wajib O/X.")
             if kirim_status == "X" and not pic_cek:
-                errs.append(f"Log operasional vacum #{idx}: PIC cek wajib diisi jika status kirim X.")
+                errs.append(f"Log operasional vacum {idx}: PIC cek wajib diisi jika status kirim X.")
     return errs
 
 
@@ -1218,9 +1218,9 @@ def validate_steril(details: Dict[str, Any]) -> List[str]:
             jam = str(row.get("jam", "")).strip()
             status = str(row.get("status", "")).strip()
             if status not in {"O", "X"}:
-                errs.append(f"2-2 log #{idx}: status wajib O atau X.")
+                errs.append(f"2-2 log {idx}: status wajib O atau X.")
             if not is_valid_hhmm(jam):
-                errs.append(f"2-2 log #{idx}: jam wajib format HH:MM.")
+                errs.append(f"2-2 log {idx}: jam wajib format HH:MM.")
     else:
         if details.get("tempat_buang_siap", "") not in {"O", "X"}:
             errs.append("2-2 wajib dipilih O atau X pada setiap laporan.")
@@ -1651,11 +1651,15 @@ def main() -> None:
                 defrost_pack_sum = 0.0
                 defrost_pack_invalid = 0
                 for idx in range(int(row_count)):
-                    dc1, dc2, dc3, dc4 = st.columns([2, 3, 2, 3])
-                    jam = dc1.text_input(f"Jam #{idx+1}", placeholder="12:55", key=f"def_jam_non_{idx}")
-                    isi = dc2.text_input(f"Status #{idx+1}", placeholder="BB fresh", key=f"def_isi_non_{idx}")
-                    pack = dc3.text_input(f"Pack #{idx+1}", placeholder="75", key=f"def_kg_non_{idx}")
-                    cat = dc4.text_input(f"Catatan #{idx+1}", placeholder="sudah termasuk campuran", key=f"def_cat_non_{idx}")
+                    dc0, dc1, dc2, dc3, dc4 = st.columns([1, 2, 3, 2, 3])
+                    no_key = f"def_no_non_{idx}"
+                    if not str(st.session_state.get(no_key, "")).strip():
+                        st.session_state[no_key] = str(idx + 1)
+                    no = dc0.text_input("No", key=no_key, max_chars=3)
+                    jam = dc1.text_input("Jam", placeholder="12:55", key=f"def_jam_non_{idx}")
+                    isi = dc2.text_input("Status", placeholder="BB fresh", key=f"def_isi_non_{idx}")
+                    pack = dc3.text_input("Pack", placeholder="75", key=f"def_kg_non_{idx}")
+                    cat = dc4.text_input("Catatan", placeholder="sudah termasuk campuran", key=f"def_cat_non_{idx}")
                     pack_val = parse_optional_float(pack)
                     if pack.strip():
                         if pack_val is None:
@@ -1666,7 +1670,8 @@ def main() -> None:
                         status_part = isi.strip()
                         if pack.strip():
                             status_part = f"{status_part} = {pack.strip()}pack".strip()
-                        defrost_lines.append(f"- {jam.strip()} {status_part}".strip())
+                        prefix = f"[{no.strip()}] " if no.strip() else ""
+                        defrost_lines.append(f"- {prefix}{jam.strip()} {status_part}".strip())
                     if cat.strip():
                         defrost_lines.append(f"({cat.strip()})")
                 status_defrost = "\n".join(defrost_lines).strip()
@@ -1889,23 +1894,27 @@ def main() -> None:
             last_tempat_status_non = ""
             last_tempat_jam_non = ""
             for idx in range(int(row_count_tempat_non)):
-                tbc1, tbc2, tbc3 = st.columns([2, 2, 4])
-                jam_tb = tbc1.text_input(f"Jam cek #{idx+1}", placeholder="12:55", key=f"tb_jam_non_{idx}")
-                opts_tb = ["", "O", "X"]
+                tbc0, tbc1, tbc2, tbc3 = st.columns([1, 2, 2, 4])
+                no_key = f"tb_no_non_{idx}"
+                if not str(st.session_state.get(no_key, "")).strip():
+                    st.session_state[no_key] = str(idx + 1)
+                no_tb = tbc0.text_input("No", key=no_key, max_chars=3)
+                jam_tb = tbc1.text_input("Jam cek", placeholder="12:55", key=f"tb_jam_non_{idx}")
+                opts_tb = ["O", "X"]
                 status_raw = str(st.session_state.get(f"tb_status_non_{idx}", "") or "")
                 status_idx = opts_tb.index(status_raw) if status_raw in opts_tb else 0
                 status_tb = tbc2.radio(
-                    f"Status #{idx+1}",
+                    "Status",
                     options=opts_tb,
                     index=status_idx,
-                    format_func=lambda x: "Pilih" if x == "" else x,
                     horizontal=True,
                     key=f"tb_status_non_{idx}",
                 )
-                cat_tb = tbc3.text_input(f"Catatan #{idx+1} (opsional)", placeholder="opsional", key=f"tb_cat_non_{idx}")
+                cat_tb = tbc3.text_input("Catatan (opsional)", placeholder="opsional", key=f"tb_cat_non_{idx}")
                 if jam_tb.strip() or status_tb.strip() or cat_tb.strip():
                     tempat_buang_rows.append({"jam": jam_tb, "status": status_tb, "catatan": cat_tb})
-                    line = f"- {jam_tb.strip() or 'Jam belum diisi'} | {status_tb or '-'}"
+                    no_prefix = f"[{no_tb.strip()}] " if no_tb.strip() else ""
+                    line = f"- {no_prefix}{jam_tb.strip() or 'Jam belum diisi'} | {status_tb or '-'}"
                     if cat_tb.strip():
                         line += f" | {cat_tb.strip()}"
                     tempat_preview_non.append(line)
@@ -1953,16 +1962,20 @@ def main() -> None:
                 giling_next_batch = 1
                 giling_open_batch: Optional[int] = None
                 for idx in range(int(row_count_giling)):
-                    gc1, gc2, gc3, gc4 = st.columns([2, 3, 2, 3])
-                    jam = gc1.text_input(f"Jam giling #{idx+1}", placeholder="11:30", key=f"gil_jam_non_{idx}")
+                    gc0, gc1, gc2, gc3, gc4 = st.columns([1, 2, 3, 2, 3])
+                    no_key = f"gil_no_non_{idx}"
+                    if not str(st.session_state.get(no_key, "")).strip():
+                        st.session_state[no_key] = str(idx + 1)
+                    no_gil = gc0.text_input("No", key=no_key, max_chars=3)
+                    jam = gc1.text_input("Jam giling", placeholder="11:30", key=f"gil_jam_non_{idx}")
                     giling_status_key = f"gil_isi_non_{idx}"
                     isi = gc2.text_input(
-                        f"Status giling #{idx+1}",
+                        "Status giling",
                         placeholder="1 / 2 / manual",
                         key=giling_status_key,
                     )
-                    resep = gc3.text_input(f"Resep giling #{idx+1}", placeholder="75", key=f"gil_kg_non_{idx}")
-                    cat = gc4.text_input(f"Catatan giling #{idx+1}", placeholder="opsional", key=f"gil_cat_non_{idx}")
+                    resep = gc3.text_input("Resep giling", placeholder="75", key=f"gil_kg_non_{idx}")
+                    cat = gc4.text_input("Catatan giling", placeholder="opsional", key=f"gil_cat_non_{idx}")
                     status_text, giling_next_batch, giling_open_batch = normalize_giling_status_input(
                         isi,
                         giling_next_batch,
@@ -1982,7 +1995,8 @@ def main() -> None:
                         status_part = status_text.strip()
                         if resep.strip():
                             status_part = f"{status_part} = {resep.strip()} resep".strip() if status_part else f"{resep.strip()} resep"
-                        giling_lines.append(f"- {jam.strip()} {status_part}".strip())
+                        prefix = f"[{no_gil.strip()}] " if no_gil.strip() else ""
+                        giling_lines.append(f"- {prefix}{jam.strip()} {status_part}".strip())
                     if cat.strip():
                         giling_lines.append(f"({cat.strip()})")
                 status_giling = "\n".join(giling_lines).strip()
@@ -2059,9 +2073,13 @@ def main() -> None:
             has_delay_o = False
             has_delay_x = False
             for idx in range(int(row_count_delay)):
-                dgc1, dgc2, dgc3 = st.columns([2, 1, 5])
+                dgc0, dgc1, dgc2, dgc3 = st.columns([1, 2, 1, 5])
+                no_key = f"delay_no_non_{idx}"
+                if not str(st.session_state.get(no_key, "")).strip():
+                    st.session_state[no_key] = str(idx + 1)
+                no_delay = dgc0.text_input("No", key=no_key, max_chars=3)
                 jam_delay = dgc1.text_input(
-                    f"Jam delay #{idx+1}",
+                    "Jam delay",
                     placeholder="14:10",
                     key=f"delay_jam_non_{idx}",
                 )
@@ -2069,7 +2087,7 @@ def main() -> None:
                 delay_raw = str(st.session_state.get(f"delay_status_non_{idx}", "") or "")
                 delay_idx = delay_opts.index(delay_raw) if delay_raw in delay_opts else delay_opts.index("X")
                 status_delay = dgc2.selectbox(
-                    f"Ada delay? #{idx+1}",
+                    "Ada delay?",
                     options=delay_opts,
                     index=delay_idx,
                     format_func=lambda x: "Ya" if x == "O" else "Tidak",
@@ -2078,13 +2096,13 @@ def main() -> None:
                 )
                 if status_delay == "O":
                     detail_delay = dgc3.text_input(
-                        f"Penyebab delay #{idx+1}",
+                        "Penyebab delay",
                         placeholder="contoh: antrian packing 40 menit",
                         key=f"delay_detail_non_{idx}",
                     )
                 else:
                     detail_delay = dgc3.text_input(
-                        f"Penyebab delay #{idx+1} (opsional)",
+                        "Penyebab delay (opsional)",
                         placeholder="kosongkan jika tidak ada delay",
                         key=f"delay_detail_non_{idx}",
                     )
@@ -2098,11 +2116,11 @@ def main() -> None:
                     )
                     if status_delay == "O":
                         giling_delay_lines_preview.append(
-                            f"- {jam_delay.strip() or 'Jam belum diisi'} | Delay ada | {detail_delay.strip() or 'Penyebab belum diisi'}"
+                            f"- {(f'[{no_delay.strip()}] ' if no_delay.strip() else '')}{jam_delay.strip() or 'Jam belum diisi'} | Delay ada | {detail_delay.strip() or 'Penyebab belum diisi'}"
                         )
                     else:
                         giling_delay_lines_preview.append(
-                            f"- {jam_delay.strip() or 'Jam belum diisi'} | Tidak ada delay"
+                            f"- {(f'[{no_delay.strip()}] ' if no_delay.strip() else '')}{jam_delay.strip() or 'Jam belum diisi'} | Tidak ada delay"
                         )
                     if status_delay == "O":
                         has_delay_o = True
@@ -2144,11 +2162,15 @@ def main() -> None:
                 vacum_pack_sum = 0.0
                 vacum_pack_invalid = 0
                 for idx in range(int(row_count_vacum)):
-                    vc1, vc2, vc3, vc4 = st.columns([2, 3, 2, 3])
-                    jam = vc1.text_input(f"Jam vacum #{idx+1}", placeholder="12:00", key=f"vac_jam_non_{idx}")
-                    isi = vc2.text_input(f"Status vacum #{idx+1}", placeholder="mulai vacum batch 1", key=f"vac_isi_non_{idx}")
-                    pack = vc3.text_input(f"Pack vacum #{idx+1}", placeholder="75", key=f"vac_kg_non_{idx}")
-                    cat = vc4.text_input(f"Catatan vacum #{idx+1}", placeholder="opsional", key=f"vac_cat_non_{idx}")
+                    vc0, vc1, vc2, vc3, vc4 = st.columns([1, 2, 3, 2, 3])
+                    no_key = f"vac_no_non_{idx}"
+                    if not str(st.session_state.get(no_key, "")).strip():
+                        st.session_state[no_key] = str(idx + 1)
+                    no_vac = vc0.text_input("No", key=no_key, max_chars=3)
+                    jam = vc1.text_input("Jam vacum", placeholder="12:00", key=f"vac_jam_non_{idx}")
+                    isi = vc2.text_input("Status vacum", placeholder="mulai vacum batch 1", key=f"vac_isi_non_{idx}")
+                    pack = vc3.text_input("Pack vacum", placeholder="75", key=f"vac_kg_non_{idx}")
+                    cat = vc4.text_input("Catatan vacum", placeholder="opsional", key=f"vac_cat_non_{idx}")
                     pack_val = parse_optional_float(pack)
                     if pack.strip():
                         if pack_val is None:
@@ -2159,7 +2181,8 @@ def main() -> None:
                         status_part = isi.strip()
                         if pack.strip():
                             status_part = f"{status_part} = {pack.strip()}pack".strip()
-                        vacum_lines.append(f"- {jam.strip()} {status_part}".strip())
+                        prefix = f"[{no_vac.strip()}] " if no_vac.strip() else ""
+                        vacum_lines.append(f"- {prefix}{jam.strip()} {status_part}".strip())
                     if cat.strip():
                         vacum_lines.append(f"({cat.strip()})")
                 status_vacum = "\n".join(vacum_lines).strip()
@@ -2261,7 +2284,7 @@ def main() -> None:
                 raw_type = str(st.session_state.get(f"vac_defect_type_non_{idx}", "") or "")
                 type_idx = defect_type_options.index(raw_type) if raw_type in defect_type_options else 0
                 jenis_type = vdc1.selectbox(
-                    f"Jenis masalah #{idx+1}",
+                    "Jenis masalah",
                     options=defect_type_options,
                     index=type_idx,
                     format_func=lambda x: "Pilih barang bermasalah" if x == "" else x,
@@ -2270,17 +2293,17 @@ def main() -> None:
                 jenis_manual = ""
                 if jenis_type == defect_type_manual:
                     jenis_manual = vdc1.text_input(
-                        f"Jenis manual #{idx+1}",
+                        "Jenis manual",
                         placeholder="contoh: seal miring / kontaminasi",
                         key=f"vac_defect_jenis_non_{idx}",
                     )
                 jumlah_pack = vdc2.text_input(
-                    f"Jumlah (pack) #{idx+1}",
+                    "Jumlah (pack)",
                     placeholder="contoh: 2",
                     key=f"vac_defect_qty_non_{idx}",
                 )
                 catatan_defect = vdc3.text_input(
-                    f"Catatan #{idx+1} (opsional)",
+                    "Catatan (opsional)",
                     placeholder="opsional",
                     key=f"vac_defect_note_non_{idx}",
                 )
@@ -2867,23 +2890,27 @@ def main() -> None:
             last_tempat_status_st = ""
             last_tempat_jam_st = ""
             for idx in range(int(row_count_tempat_st)):
-                tbc1, tbc2, tbc3 = st.columns([2, 2, 4])
-                jam_tb = tbc1.text_input(f"Jam cek #{idx+1}", placeholder="12:55", key=f"tb_jam_st_{idx}")
-                opts_tb = ["", "O", "X"]
+                tbc0, tbc1, tbc2, tbc3 = st.columns([1, 2, 2, 4])
+                no_key = f"tb_no_st_{idx}"
+                if not str(st.session_state.get(no_key, "")).strip():
+                    st.session_state[no_key] = str(idx + 1)
+                no_tb = tbc0.text_input("No", key=no_key, max_chars=3)
+                jam_tb = tbc1.text_input("Jam cek", placeholder="12:55", key=f"tb_jam_st_{idx}")
+                opts_tb = ["O", "X"]
                 status_raw = str(st.session_state.get(f"tb_status_st_{idx}", "") or "")
                 status_idx = opts_tb.index(status_raw) if status_raw in opts_tb else 0
                 status_tb = tbc2.radio(
-                    f"Status #{idx+1}",
+                    "Status",
                     options=opts_tb,
                     index=status_idx,
-                    format_func=lambda x: "Pilih" if x == "" else x,
                     horizontal=True,
                     key=f"tb_status_st_{idx}",
                 )
-                cat_tb = tbc3.text_input(f"Catatan #{idx+1} (opsional)", placeholder="opsional", key=f"tb_cat_st_{idx}")
+                cat_tb = tbc3.text_input("Catatan (opsional)", placeholder="opsional", key=f"tb_cat_st_{idx}")
                 if jam_tb.strip() or status_tb.strip() or cat_tb.strip():
                     tempat_buang_rows.append({"jam": jam_tb, "status": status_tb, "catatan": cat_tb})
-                    line = f"- {jam_tb.strip() or 'Jam belum diisi'} | {status_tb or '-'}"
+                    no_prefix = f"[{no_tb.strip()}] " if no_tb.strip() else ""
+                    line = f"- {no_prefix}{jam_tb.strip() or 'Jam belum diisi'} | {status_tb or '-'}"
                     if cat_tb.strip():
                         line += f" | {cat_tb.strip()}"
                     tempat_preview_st.append(line)
