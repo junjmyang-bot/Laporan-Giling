@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import secrets
 import uuid
@@ -1861,7 +1861,8 @@ def main() -> None:
                         st.session_state["defrost_rows_non"] = max(1, int(st.session_state.get("defrost_rows_non", 1)) - 1)
                         st.rerun()
                 with d3:
-                    st.caption(f"Jumlah baris defrost: {int(st.session_state.get('defrost_rows_non', 1))}")
+                    pass
+
                 row_count = ensure_row_count_from_session(
                     "defrost_rows_non",
                     ["def_jam_non_", "def_isi_non_", "def_kg_non_", "def_cat_non_"],
@@ -2094,15 +2095,15 @@ def main() -> None:
 
             tb1, tb2, tb3 = st.columns([2, 2, 6])
             with tb1:
-                if st.button("+ Tambah log 2-2", key="btn_add_tempat_non"):
+                if st.button("+ Tambah", key="btn_add_tempat_non"):
                     st.session_state["tempat_buang_rows_non"] = min(20, int(st.session_state.get("tempat_buang_rows_non", 1)) + 1)
                     st.rerun()
             with tb2:
-                if st.button("- Hapus log 2-2", key="btn_del_tempat_non"):
+                if st.button("- Hapus", key="btn_del_tempat_non"):
                     st.session_state["tempat_buang_rows_non"] = max(1, int(st.session_state.get("tempat_buang_rows_non", 1)) - 1)
                     st.rerun()
             with tb3:
-                st.caption(f"Jumlah log 2-2: {int(st.session_state.get('tempat_buang_rows_non', 1))}")
+                pass
 
             row_count_tempat_non = ensure_row_count_from_session(
                 "tempat_buang_rows_non",
@@ -2170,7 +2171,8 @@ def main() -> None:
                         st.session_state["giling_rows_non"] = max(1, int(st.session_state.get("giling_rows_non", 1)) - 1)
                         st.rerun()
                 with g3:
-                    st.caption(f"Jumlah baris giling: {int(st.session_state.get('giling_rows_non', 1))}")
+                    pass
+
                 row_count_giling = ensure_row_count_from_session(
                     "giling_rows_non",
                     ["gil_jam_non_", "gil_isi_non_", "gil_kg_non_", "gil_cat_non_"],
@@ -2281,7 +2283,7 @@ def main() -> None:
                     st.session_state["giling_delay_rows_non"] = max(1, int(st.session_state.get("giling_delay_rows_non", 1)) - 1)
                     st.rerun()
             with gd3:
-                st.caption(f"Jumlah log delay: {int(st.session_state.get('giling_delay_rows_non', 1))}")
+                pass
 
             row_count_delay = ensure_row_count_from_session(
                 "giling_delay_rows_non",
@@ -2371,7 +2373,7 @@ def main() -> None:
                         st.session_state["vacum_rows_non"] = max(1, int(st.session_state.get("vacum_rows_non", 1)) - 1)
                         st.rerun()
                 with v3:
-                    st.caption(f"Jumlah baris vacum: {int(st.session_state.get('vacum_rows_non', 1))}")
+                    pass
 
                 row_count_vacum = ensure_row_count_from_session(
                     "vacum_rows_non",
@@ -2489,7 +2491,7 @@ def main() -> None:
                     st.session_state["vacum_defect_rows_non"] = max(1, int(st.session_state.get("vacum_defect_rows_non", 1)) - 1)
                     st.rerun()
             with vd3:
-                st.caption(f"Jumlah baris masalah vacum: {int(st.session_state.get('vacum_defect_rows_non', 1))}")
+                pass
 
             row_count_vac_defect = ensure_row_count_from_session(
                 "vacum_defect_rows_non",
@@ -2604,7 +2606,7 @@ def main() -> None:
                     st.session_state["vacum_ops_rows_non"] = max(1, int(st.session_state.get("vacum_ops_rows_non", 1)) - 1)
                     st.rerun()
             with vo3:
-                st.caption(f"Jumlah log operasional vacum: {int(st.session_state.get('vacum_ops_rows_non', 1))}")
+                pass
 
             row_count_vac_ops = ensure_row_count_from_session(
                 "vacum_ops_rows_non",
@@ -2759,7 +2761,7 @@ def main() -> None:
                     st.session_state["handover_rows_non"] = max(1, int(st.session_state.get("handover_rows_non", 1)) - 1)
                     st.rerun()
             with h3:
-                st.caption(f"Jumlah baris handover: {int(st.session_state.get('handover_rows_non', 1))}")
+                pass
 
             row_count_handover = ensure_row_count_from_session(
                 "handover_rows_non",
@@ -2978,7 +2980,8 @@ def main() -> None:
                         st.session_state["defrost_rows_st"] = max(1, int(st.session_state.get("defrost_rows_st", 1)) - 1)
                         st.rerun()
                 with d3:
-                    st.caption(f"Jumlah baris defrost: {int(st.session_state.get('defrost_rows_st', 1))}")
+                    pass
+
                 row_count = ensure_row_count_from_session(
                     "defrost_rows_st",
                     ["def_jam_st_", "def_isi_st_", "def_kg_st_", "def_cat_st_"],
@@ -3090,15 +3093,15 @@ def main() -> None:
 
             tb1, tb2, tb3 = st.columns([2, 2, 6])
             with tb1:
-                if st.button("+ Tambah log 2-2", key="btn_add_tempat_st"):
+                if st.button("+ Tambah", key="btn_add_tempat_st"):
                     st.session_state["tempat_buang_rows_st"] = min(20, int(st.session_state.get("tempat_buang_rows_st", 1)) + 1)
                     st.rerun()
             with tb2:
-                if st.button("- Hapus log 2-2", key="btn_del_tempat_st"):
+                if st.button("- Hapus", key="btn_del_tempat_st"):
                     st.session_state["tempat_buang_rows_st"] = max(1, int(st.session_state.get("tempat_buang_rows_st", 1)) - 1)
                     st.rerun()
             with tb3:
-                st.caption(f"Jumlah log 2-2: {int(st.session_state.get('tempat_buang_rows_st', 1))}")
+                pass
 
             row_count_tempat_st = ensure_row_count_from_session(
                 "tempat_buang_rows_st",
@@ -3167,7 +3170,8 @@ def main() -> None:
                         st.session_state["giling_rows_st"] = max(1, int(st.session_state.get("giling_rows_st", 1)) - 1)
                         st.rerun()
                 with g3:
-                    st.caption(f"Jumlah baris giling: {int(st.session_state.get('giling_rows_st', 1))}")
+                    pass
+
                 row_count_giling_st = ensure_row_count_from_session(
                     "giling_rows_st",
                     ["gil_jam_st_", "gil_isi_st_", "gil_kg_st_", "gil_cat_st_"],
@@ -3249,15 +3253,15 @@ def main() -> None:
 
             s1, s2, s3 = st.columns([2, 2, 6])
             with s1:
-                if st.button("+ Tambah log steril", key="btn_add_steril_row_st"):
+                if st.button("+ Tambah", key="btn_add_steril_row_st"):
                     st.session_state["steril_rows_st"] = min(30, int(st.session_state.get("steril_rows_st", 1)) + 1)
                     st.rerun()
             with s2:
-                if st.button("- Hapus log steril", key="btn_del_steril_row_st"):
+                if st.button("- Hapus", key="btn_del_steril_row_st"):
                     st.session_state["steril_rows_st"] = max(1, int(st.session_state.get("steril_rows_st", 1)) - 1)
                     st.rerun()
             with s3:
-                st.caption(f"Jumlah log steril: {int(st.session_state.get('steril_rows_st', 1))}")
+                pass
 
             row_count_steril = ensure_row_count_from_session(
                 "steril_rows_st",
@@ -3321,15 +3325,16 @@ def main() -> None:
                         st.session_state[f"steril_total_kg_st_{idx}"] = str(row.get("berat_kg", ""))
             tb1, tb2, tb3 = st.columns([2, 2, 6])
             with tb1:
-                if st.button("+ Tambah rincian total", key="btn_add_steril_total_st"):
+                if st.button("+ Tambah", key="btn_add_steril_total_st"):
                     st.session_state["steril_total_rows_st"] = min(15, int(st.session_state.get("steril_total_rows_st", 1)) + 1)
                     st.rerun()
             with tb2:
-                if st.button("- Hapus rincian total", key="btn_del_steril_total_st"):
+                if st.button("- Hapus", key="btn_del_steril_total_st"):
                     st.session_state["steril_total_rows_st"] = max(1, int(st.session_state.get("steril_total_rows_st", 1)) - 1)
                     st.rerun()
             with tb3:
-                st.caption(f"Jumlah rincian total: {int(st.session_state.get('steril_total_rows_st', 1))}")
+                pass
+
             row_count_total = ensure_row_count_from_session(
                 "steril_total_rows_st",
                 ["steril_total_no_st_", "steril_total_qty_st_", "steril_total_kg_st_"],
@@ -3385,15 +3390,15 @@ def main() -> None:
                         st.session_state[f"steril_check_actual_st_{idx}"] = str(row.get("jam_actual", ""))
             c1, c2, c3 = st.columns([2, 2, 6])
             with c1:
-                if st.button("+ Tambah cek jam steril", key="btn_add_steril_check_st"):
+                if st.button("+ Tambah", key="btn_add_steril_check_st"):
                     st.session_state["steril_check_rows_st"] = min(30, int(st.session_state.get("steril_check_rows_st", 1)) + 1)
                     st.rerun()
             with c2:
-                if st.button("- Hapus cek jam steril", key="btn_del_steril_check_st"):
+                if st.button("- Hapus", key="btn_del_steril_check_st"):
                     st.session_state["steril_check_rows_st"] = max(1, int(st.session_state.get("steril_check_rows_st", 1)) - 1)
                     st.rerun()
             with c3:
-                st.caption(f"Jumlah cek jam steril: {int(st.session_state.get('steril_check_rows_st', 1))}")
+                pass
 
             row_count_check = ensure_row_count_from_session(
                 "steril_check_rows_st",
@@ -3471,15 +3476,16 @@ def main() -> None:
                         st.session_state[f"cb_cat_st_{idx}"] = str(row.get("catatan", ""))
             cb1, cb2, cb3 = st.columns([2, 2, 6])
             with cb1:
-                if st.button("+ Tambah log CB", key="btn_add_cb_row_st"):
+                if st.button("+ Tambah", key="btn_add_cb_row_st"):
                     st.session_state["cb_rows_st"] = min(30, int(st.session_state.get("cb_rows_st", 1)) + 1)
                     st.rerun()
             with cb2:
-                if st.button("- Hapus log CB", key="btn_del_cb_row_st"):
+                if st.button("- Hapus", key="btn_del_cb_row_st"):
                     st.session_state["cb_rows_st"] = max(1, int(st.session_state.get("cb_rows_st", 1)) - 1)
                     st.rerun()
             with cb3:
-                st.caption(f"Jumlah log CB: {int(st.session_state.get('cb_rows_st', 1))}")
+                pass
+
             row_count_cb = ensure_row_count_from_session(
                 "cb_rows_st",
                 ["cb_no_st_", "cb_jam_st_", "cb_batch_st_", "cb_panci_st_", "cb_cat_st_"],
@@ -3679,3 +3685,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
