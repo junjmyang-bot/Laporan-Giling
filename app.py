@@ -51,14 +51,10 @@ TEAM_PASSWORDS_ERROR: Optional[str] = None
 
 def load_team_passwords() -> Dict[str, str]:
     global TEAM_PASSWORDS_ERROR
-    defaults = {
-        "KUPAS-1": "abcd",
-        "KUPAS-2": "1234",
-        "KUPAS-3": "ab12",
-    }
+    defaults: Dict[str, str] = {}
     raw = read_setting("TEAM_PASSWORDS", "").strip()
     if not raw:
-        TEAM_PASSWORDS_ERROR = "TEAM_PASSWORDS belum diatur. Sementara pakai PIN default."
+        TEAM_PASSWORDS_ERROR = "TEAM_PASSWORDS belum diatur. Set env/secret TEAM_PASSWORDS untuk membuka aplikasi."
         return defaults
     try:
         parsed = json.loads(raw)
@@ -67,7 +63,7 @@ def load_team_passwords() -> Dict[str, str]:
             return {str(k): str(v) for k, v in parsed.items()}
     except Exception:
         pass
-    TEAM_PASSWORDS_ERROR = "TEAM_PASSWORDS tidak valid. Sementara pakai PIN default."
+    TEAM_PASSWORDS_ERROR = "TEAM_PASSWORDS tidak valid. Periksa format JSON TEAM_PASSWORDS."
     return defaults
 
 
@@ -771,7 +767,7 @@ def render_header_block(payload: Dict[str, Any]) -> str:
 
 
 def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
-    d = payload["details"]
+    d = payload.get("details") or {}
     nama_petugas = d.get("nama_petugas_list", [])
     nama_petugas_txt = ", ".join([str(x).strip() for x in nama_petugas if str(x).strip()]) or "-"
 
@@ -893,7 +889,7 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
 
 
 def render_steril_blocks(payload: Dict[str, Any]) -> List[str]:
-    d = payload["details"]
+    d = payload.get("details") or {}
     nama_petugas = d.get("nama_petugas_list", [])
     nama_petugas_txt = ", ".join([str(x).strip() for x in nama_petugas if str(x).strip()]) or "-"
 
@@ -1253,8 +1249,6 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
         expected = total_beku_kg + total_fresh_kg - total_buang_kg
         if abs(expected - total_akhir_kg) > 0.001:
             errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
-    else:
-        errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
     handover_rows = details.get("handover_rows", [])
     if not handover_rows:
         errs.append("Isi minimal 1 baris serah-terima ke packing/press.")
@@ -1426,8 +1420,6 @@ def validate_steril(details: Dict[str, Any]) -> List[str]:
         expected = total_beku_kg + total_fresh_kg - total_buang_kg
         if abs(expected - total_akhir_kg) > 0.001:
             errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
-    else:
-        errs.append("Total akhir harus sama dengan (barang beku + fresh - dibuang).")
 
     tempat_rows = details.get("tempat_buang_rows", [])
     active_tempat_rows: List[Dict[str, Any]] = []
@@ -1733,6 +1725,9 @@ def main() -> None:
         st.warning(TEAM_PASSWORDS_ERROR)
     st.title("Laporan Giling")
     st.caption("Mobile-first report app (30 menit / 1 kali) | Telegram utama | Google Sheets backup wajib")
+    if not TEAM_PASSWORDS:
+        st.error(TEAM_PASSWORDS_ERROR or "TEAM_PASSWORDS belum tersedia.")
+        st.stop()
 
     if "lock_token" not in st.session_state:
         st.session_state["lock_token"] = ""
@@ -1803,6 +1798,7 @@ def main() -> None:
         st.session_state["owner_scope"] = operator_scope
 
         scope = f"{work_date_scope}::{team_scope}"
+        _pin_expected = TEAM_PASSWORDS.get(team_scope, "")
         lock_now = read_lock(team_scope, str(work_date_scope))
         if lock_now:
             st.caption(f"Kunci aktif: {lock_now.get('owner', '-')} ({lock_now.get('updated_at', '-')})")
@@ -1816,7 +1812,7 @@ def main() -> None:
             if st.button("Open Team", use_container_width=True):
                 if not operator_scope.strip():
                     st.error("Nama pelapor wajib diisi.")
-                elif secrets.compare_digest(team_pin, TEAM_PASSWORDS.get(team_scope, "")):
+                elif _pin_expected and team_pin and secrets.compare_digest(team_pin, _pin_expected):
                     ok, msg, lock = open_team_lock(team_scope, str(work_date_scope), operator_scope.strip())
                     if ok:
                         st.session_state["lock_token"] = lock.get("token", "")
@@ -1832,7 +1828,7 @@ def main() -> None:
             if st.button("Take Over Team", use_container_width=True):
                 if not operator_scope.strip():
                     st.error("Nama pelapor wajib diisi.")
-                elif secrets.compare_digest(team_pin, TEAM_PASSWORDS.get(team_scope, "")):
+                elif _pin_expected and team_pin and secrets.compare_digest(team_pin, _pin_expected):
                     ok, msg, lock = takeover_team_lock(team_scope, str(work_date_scope), operator_scope.strip())
                     if ok:
                         st.session_state["lock_token"] = lock.get("token", "")
@@ -1867,6 +1863,7 @@ def main() -> None:
             st.session_state["report_type_confirmed"] = loaded_scope_report_type
             st.session_state["report_type"] = loaded_scope_report_type
         st.session_state["loaded_details"] = loaded_scope_details
+        st.session_state["scope_just_loaded"] = True
         st.session_state["loaded_scope_key"] = scope
         st.session_state["sticky_validation_active"] = False
         st.session_state["sticky_validation_errors"] = []
@@ -3791,17 +3788,18 @@ def main() -> None:
 
     prev_state_snapshot = load_work_state(team_id.strip(), str(work_date))
     # Persist current working context after form render (for refresh recovery).
-    save_work_state(
-        team_id.strip() or "unknown",
-        str(work_date),
-        {
-            "team_id": team_id,
-            "shift": shift,
-            "pelapor": pelapor,
-            "report_type": report_type,
-            "details": details,
-        },
-    )
+    if not st.session_state.pop("scope_just_loaded", False):
+        save_work_state(
+            team_id.strip() or "unknown",
+            str(work_date),
+            {
+                "team_id": team_id,
+                "shift": shift,
+                "pelapor": pelapor,
+                "report_type": report_type,
+                "details": details,
+            },
+        )
 
     def collect_validation_errors(prev_snapshot: Dict[str, Any]) -> List[str]:
         common_form = {"team_id": team_id, "pelapor": pelapor, "shift": shift}
