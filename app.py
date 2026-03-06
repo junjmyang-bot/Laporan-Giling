@@ -677,15 +677,21 @@ def render_non_steril_blocks(payload: Dict[str, Any]) -> List[str]:
     vacum_ops_rows = d.get("vacum_ops_rows", [])
     vacum_ops_lines: List[str] = []
     for idx, row in enumerate(vacum_ops_rows, start=1):
-        jam = str(row.get("jam", "")).strip() or "-"
+        start_stop = str(row.get("stop_start", row.get("jam", ""))).strip()
+        end_stop = str(row.get("stop_end", "")).strip()
+        jam = start_stop or str(row.get("jam", "")).strip() or "-"
         antrian = str(row.get("antrian_status", "")).strip() or "-"
         antrian_detail = str(row.get("antrian_detail", "")).strip() or "-"
         mesin = str(row.get("mesin_status", "")).strip() or "-"
         mesin_detail = str(row.get("mesin_detail", "")).strip() or "-"
         kirim = str(row.get("kirim_status", "")).strip() or "-"
         pic = str(row.get("pic_cek", "")).strip() or "-"
+        stop_window = jam
+        if start_stop or end_stop:
+            stop_window = f"{start_stop or '-'}-{end_stop or '-'}"
+        mesin_label = "stop/istirahat" if mesin == "O" else ("normal" if mesin == "X" else "-")
         vacum_ops_lines.append(
-            f"- [{idx}] {jam} | antrian:{antrian} ({antrian_detail}) | mesin:{mesin} ({mesin_detail}) | kirim:{kirim} | PIC:{pic}"
+            f"- {stop_window} | mesin:{mesin_label} ({mesin_detail}) | antrian:{antrian} ({antrian_detail}) | kirim:{kirim} | PIC:{pic}"
         )
     if not vacum_ops_lines:
         vacum_ops_lines = ["- Tidak ada log operasional vacum"]
@@ -1288,35 +1294,42 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
     if isinstance(vacum_ops_rows, list):
         for row in vacum_ops_rows:
             jam = str(row.get("jam", "")).strip()
+            stop_start = str(row.get("stop_start", jam)).strip()
+            stop_end = str(row.get("stop_end", "")).strip()
             antrian_status = str(row.get("antrian_status", "")).strip()
             antrian_detail = str(row.get("antrian_detail", "")).strip()
             mesin_status = str(row.get("mesin_status", "")).strip()
             mesin_detail = str(row.get("mesin_detail", "")).strip()
             kirim_status = str(row.get("kirim_status", "")).strip()
             pic_cek = str(row.get("pic_cek", "")).strip()
-            if jam or antrian_status or antrian_detail or mesin_status or mesin_detail or kirim_status or pic_cek:
+            if stop_start or stop_end or jam or antrian_status or antrian_detail or mesin_status or mesin_detail or kirim_status or pic_cek:
                 active_ops_rows.append(row)
     if not active_ops_rows:
         errs.append("Isi minimal 1 log operasional vacum.")
     else:
         for idx, row in enumerate(active_ops_rows, start=1):
             jam = str(row.get("jam", "")).strip()
+            stop_start = str(row.get("stop_start", jam)).strip()
+            stop_end = str(row.get("stop_end", "")).strip()
             antrian_status = str(row.get("antrian_status", "")).strip()
             antrian_detail = str(row.get("antrian_detail", "")).strip()
             mesin_status = str(row.get("mesin_status", "")).strip()
             mesin_detail = str(row.get("mesin_detail", "")).strip()
             kirim_status = str(row.get("kirim_status", "")).strip()
             pic_cek = str(row.get("pic_cek", "")).strip()
-            if not jam:
-                errs.append(f"Log operasional vacum {idx}: jam wajib diisi.")
             if antrian_status not in {"O", "X"}:
                 errs.append(f"Log operasional vacum {idx}: status antrian wajib O/X.")
             if antrian_status == "O" and not antrian_detail:
                 errs.append(f"Log operasional vacum {idx}: detail antrian wajib diisi jika status O.")
             if mesin_status not in {"O", "X"}:
                 errs.append(f"Log operasional vacum {idx}: status mesin wajib O/X.")
-            if mesin_status == "X" and not mesin_detail:
-                errs.append(f"Log operasional vacum {idx}: detail mesin wajib diisi jika status X.")
+            if mesin_status == "O":
+                if not is_valid_hhmm(stop_start):
+                    errs.append(f"Log operasional vacum {idx}: jam mulai stop wajib diisi (contoh 1000 atau 10:00).")
+                if not is_valid_hhmm(stop_end):
+                    errs.append(f"Log operasional vacum {idx}: jam selesai stop wajib diisi (contoh 1030 atau 10:30).")
+                if not mesin_detail:
+                    errs.append(f"Log operasional vacum {idx}: detail mesin wajib diisi jika mesin stop/istirahat = O.")
             if kirim_status not in {"O", "X"}:
                 errs.append(f"Log operasional vacum {idx}: status kirim wajib O/X.")
             if kirim_status == "X" and not pic_cek:
@@ -2675,11 +2688,14 @@ def main() -> None:
             render_section_checkpoint_ui(team_id, str(work_date), report_type, "vacum_defect", "barang ada masalah vacum")
 
             st.markdown("#### Log operasional vacum (tiap laporan)")
+            st.caption("Tujuan: catat kapan mesin vacuum stop/istirahat (jam mulai + jam selesai) per laporan.")
             loaded_vacum_ops_rows = loaded_details.get("vacum_ops_rows", [])
             if isinstance(loaded_vacum_ops_rows, list) and loaded_vacum_ops_rows:
                 existing_ops_local = False
                 for i in range(20):
-                    if str(st.session_state.get(f"vac_ops_jam_non_{i}", "")).strip() or str(
+                    if str(st.session_state.get(f"vac_ops_stop_start_non_{i}", "")).strip() or str(
+                        st.session_state.get(f"vac_ops_stop_end_non_{i}", "")
+                    ).strip() or str(
                         st.session_state.get(f"vac_ops_antrian_non_{i}", "")
                     ).strip() or str(st.session_state.get(f"vac_ops_mesin_non_{i}", "")).strip() or str(
                         st.session_state.get(f"vac_ops_kirim_non_{i}", "")
@@ -2689,7 +2705,11 @@ def main() -> None:
                 if not existing_ops_local:
                     st.session_state["vacum_ops_rows_non"] = min(20, max(1, len(loaded_vacum_ops_rows)))
                     for idx, row in enumerate(loaded_vacum_ops_rows[:20]):
-                        st.session_state[f"vac_ops_jam_non_{idx}"] = str(row.get("jam", ""))
+                        stop_start = str(row.get("stop_start", row.get("jam", "")))
+                        stop_end = str(row.get("stop_end", ""))
+                        st.session_state[f"vac_ops_stop_start_non_{idx}"] = stop_start
+                        st.session_state[f"vac_ops_stop_end_non_{idx}"] = stop_end
+                        st.session_state[f"vac_ops_jam_non_{idx}"] = stop_start
                         st.session_state[f"vac_ops_antrian_non_{idx}"] = str(row.get("antrian_status", ""))
                         st.session_state[f"vac_ops_antrian_det_non_{idx}"] = str(row.get("antrian_detail", ""))
                         st.session_state[f"vac_ops_mesin_non_{idx}"] = str(row.get("mesin_status", ""))
@@ -2704,10 +2724,12 @@ def main() -> None:
                 or str(loaded_details.get("mesin_vacum_istirahat_detail", "")).strip()
                 or str(loaded_details.get("nama_pic_cek", "")).strip()
             ):
-                if not str(st.session_state.get("vac_ops_jam_non_0", "")).strip() and not str(
+                if not str(st.session_state.get("vac_ops_stop_start_non_0", "")).strip() and not str(
                     st.session_state.get("vac_ops_antrian_non_0", "")
                 ).strip() and not str(st.session_state.get("vac_ops_mesin_non_0", "")).strip():
                     st.session_state["vacum_ops_rows_non"] = 1
+                    st.session_state["vac_ops_stop_start_non_0"] = ""
+                    st.session_state["vac_ops_stop_end_non_0"] = ""
                     st.session_state["vac_ops_jam_non_0"] = ""
                     st.session_state["vac_ops_antrian_non_0"] = str(loaded_details.get("vacum_antrian_lama", ""))
                     st.session_state["vac_ops_antrian_det_non_0"] = str(loaded_details.get("vacum_antrian_detail", ""))
@@ -2725,6 +2747,8 @@ def main() -> None:
                     drop_last_row_from_session(
                         "vacum_ops_rows_non",
                         [
+                            "vac_ops_stop_start_non_",
+                            "vac_ops_stop_end_non_",
                             "vac_ops_jam_non_",
                             "vac_ops_antrian_non_",
                             "vac_ops_antrian_det_non_",
@@ -2741,6 +2765,8 @@ def main() -> None:
             row_count_vac_ops = ensure_row_count_from_session(
                 "vacum_ops_rows_non",
                 [
+                    "vac_ops_stop_start_non_",
+                    "vac_ops_stop_end_non_",
                     "vac_ops_jam_non_",
                     "vac_ops_antrian_non_",
                     "vac_ops_antrian_det_non_",
@@ -2763,30 +2789,33 @@ def main() -> None:
             has_kirim_x = False
             pic_candidates: List[str] = []
             for idx in range(int(row_count_vac_ops)):
-                voc1, voc2, voc3, voc4 = st.columns([2, 2, 2, 2])
-                jam_ops = voc1.text_input("Jam", placeholder="14:20", key=f"vac_ops_jam_non_{idx}")
+                voc1, voc2, voc3, voc4, voc5 = st.columns([2, 2, 2, 2, 2])
+                stop_start = voc1.text_input("Jam mulai stop", placeholder="1000", key=f"vac_ops_stop_start_non_{idx}")
+                stop_end = voc2.text_input("Jam selesai stop", placeholder="1030", key=f"vac_ops_stop_end_non_{idx}")
+                jam_ops = stop_start.strip()
+                st.session_state[f"vac_ops_jam_non_{idx}"] = jam_ops
                 ops_opts = ["", "O", "X"]
-                antrian_raw = str(st.session_state.get(f"vac_ops_antrian_non_{idx}", "") or "")
-                antrian_idx = ops_opts.index(antrian_raw) if antrian_raw in ops_opts else 0
-                antrian_status = voc2.selectbox(
-                    "Antrian",
-                    options=ops_opts,
-                    index=antrian_idx,
-                    format_func=lambda x: "Pilih" if x == "" else x,
-                    key=f"vac_ops_antrian_non_{idx}",
-                )
                 mesin_raw = str(st.session_state.get(f"vac_ops_mesin_non_{idx}", "") or "")
                 mesin_idx = ops_opts.index(mesin_raw) if mesin_raw in ops_opts else 0
                 mesin_status = voc3.selectbox(
-                    "Mesin",
+                    "Mesin stop/istirahat?",
                     options=ops_opts,
                     index=mesin_idx,
                     format_func=lambda x: "Pilih" if x == "" else x,
                     key=f"vac_ops_mesin_non_{idx}",
                 )
+                antrian_raw = str(st.session_state.get(f"vac_ops_antrian_non_{idx}", "") or "")
+                antrian_idx = ops_opts.index(antrian_raw) if antrian_raw in ops_opts else 0
+                antrian_status = voc4.selectbox(
+                    "Antrian lama?",
+                    options=ops_opts,
+                    index=antrian_idx,
+                    format_func=lambda x: "Pilih" if x == "" else x,
+                    key=f"vac_ops_antrian_non_{idx}",
+                )
                 kirim_raw = str(st.session_state.get(f"vac_ops_kirim_non_{idx}", "") or "")
                 kirim_idx = ops_opts.index(kirim_raw) if kirim_raw in ops_opts else 0
-                kirim_status = voc4.selectbox(
+                kirim_status = voc5.selectbox(
                     "Kirim",
                     options=ops_opts,
                     index=kirim_idx,
@@ -2794,25 +2823,36 @@ def main() -> None:
                     key=f"vac_ops_kirim_non_{idx}",
                 )
                 vod1, vod2, vod3 = st.columns([3, 3, 2])
-                antrian_detail = vod1.text_input(
+                mesin_detail = vod1.text_input(
+                    "Detail mesin (alasan stop/istirahat)",
+                    placeholder="contoh: mesin panas, pendinginan 30 menit",
+                    key=f"vac_ops_mesin_det_non_{idx}",
+                )
+                antrian_detail = vod2.text_input(
                     "Detail antrian",
                     placeholder="isi jika antrian = O",
                     key=f"vac_ops_antrian_det_non_{idx}",
-                )
-                mesin_detail = vod2.text_input(
-                    "Detail mesin",
-                    placeholder="isi jika mesin = X",
-                    key=f"vac_ops_mesin_det_non_{idx}",
                 )
                 pic_cek = vod3.text_input(
                     "PIC cek",
                     placeholder="isi jika kirim = X",
                     key=f"vac_ops_pic_non_{idx}",
                 )
-                if jam_ops.strip() or antrian_status.strip() or antrian_detail.strip() or mesin_status.strip() or mesin_detail.strip() or kirim_status.strip() or pic_cek.strip():
+                if (
+                    stop_start.strip()
+                    or stop_end.strip()
+                    or antrian_status.strip()
+                    or antrian_detail.strip()
+                    or mesin_status.strip()
+                    or mesin_detail.strip()
+                    or kirim_status.strip()
+                    or pic_cek.strip()
+                ):
                     vacum_ops_rows.append(
                         {
                             "jam": jam_ops,
+                            "stop_start": stop_start,
+                            "stop_end": stop_end,
                             "antrian_status": antrian_status,
                             "antrian_detail": antrian_detail,
                             "mesin_status": mesin_status,
@@ -2834,9 +2874,14 @@ def main() -> None:
                 if kirim_status == "X":
                     has_kirim_x = True
                 if antrian_detail.strip():
-                    antrian_detail_lines.append(f"{jam_ops.strip() or '-'}: {antrian_detail.strip()}")
+                    antrian_detail_lines.append(f"{stop_start.strip() or jam_ops.strip() or '-'}: {antrian_detail.strip()}")
                 if mesin_detail.strip():
-                    mesin_detail_lines.append(f"{jam_ops.strip() or '-'}: {mesin_detail.strip()}")
+                    if stop_start.strip() or stop_end.strip():
+                        mesin_detail_lines.append(
+                            f"{stop_start.strip() or '-'}-{stop_end.strip() or '-'}: {mesin_detail.strip()}"
+                        )
+                    else:
+                        mesin_detail_lines.append(f"{jam_ops.strip() or '-'}: {mesin_detail.strip()}")
                 if pic_cek.strip():
                     pic_candidates.append(pic_cek.strip())
 
