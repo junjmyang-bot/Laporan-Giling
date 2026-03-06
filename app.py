@@ -613,6 +613,23 @@ def tg_send_photo(photo_path: str, caption: str = "") -> Tuple[bool, str, Dict[s
     return ok, msg, data
 
 
+def tg_send_update_reply(message_id: int, text: str = "Laporan sudah diperbarui.") -> Tuple[bool, str, Dict[str, Any]]:
+    if not TELEGRAM_CHAT_ID:
+        return False, "Missing TELEGRAM_CHAT_ID", {}
+    ok, msg, data = tg_api(
+        "sendMessage",
+        {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": text,
+            "reply_to_message_id": int(message_id),
+            "allow_sending_without_reply": True,
+        },
+    )
+    if isinstance(data, dict) and "ok" in data:
+        return bool(data.get("ok")), msg, data
+    return ok, msg, data
+
+
 @dataclass
 class SubmitResult:
     telegram_ok: bool
@@ -968,6 +985,7 @@ def send_telegram_edit_first(payload: Dict[str, Any]) -> Tuple[bool, List[int], 
     existing_ids = payload.get("existing_message_ids", [])
     result_ids: List[int] = []
     err_msgs: List[str] = []
+    edited_ids: List[int] = []
 
     for idx, text in enumerate(parts):
         edited = False
@@ -983,8 +1001,19 @@ def send_telegram_edit_first(payload: Dict[str, Any]) -> Tuple[bool, List[int], 
             if ok:
                 result_ids.append(existing_ids[idx])
                 edited = True
+                edited_ids.append(existing_ids[idx])
             else:
-                err_msgs.append(f"edit part {idx+1} failed")
+                desc = ""
+                if isinstance(data, dict):
+                    desc = str(data.get("description", "") or data.get("error", ""))
+                desc_l = desc.lower()
+                if "message is not modified" in desc_l:
+                    result_ids.append(existing_ids[idx])
+                    edited = True
+                elif ("message to edit not found" in desc_l) or ("can't be edited" in desc_l) or ("message can't be edited" in desc_l):
+                    err_msgs.append(f"edit part {idx+1} failed (fallback send new)")
+                else:
+                    err_msgs.append(f"edit part {idx+1} failed: {desc or 'unknown'}")
 
         if not edited:
             ok, _, data = tg_api(
@@ -1002,6 +1031,15 @@ def send_telegram_edit_first(payload: Dict[str, Any]) -> Tuple[bool, List[int], 
             msg_id = data.get("result", {}).get("message_id")
             if isinstance(msg_id, int):
                 result_ids.append(msg_id)
+
+    if edited_ids:
+        root_reply_id = edited_ids[0]
+        ok_upd, _, data_upd = tg_send_update_reply(root_reply_id, "Laporan sudah diperbarui.")
+        if not ok_upd:
+            desc = ""
+            if isinstance(data_upd, dict):
+                desc = str(data_upd.get("description", "") or data_upd.get("error", ""))
+            err_msgs.append(f"send update reply failed: {desc or 'unknown'}")
 
     photo_specs = [("handover_photo_path", "Bukti handover packing")]
     sent_photo_paths: set[str] = set()
