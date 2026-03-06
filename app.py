@@ -1704,6 +1704,10 @@ def main() -> None:
         st.session_state["handover_rows_non"] = 1
     if "loaded_scope_key" not in st.session_state:
         st.session_state["loaded_scope_key"] = ""
+    if "sticky_validation_active" not in st.session_state:
+        st.session_state["sticky_validation_active"] = False
+    if "sticky_validation_errors" not in st.session_state:
+        st.session_state["sticky_validation_errors"] = []
 
     with st.container(border=True):
         st.markdown("**Header**")
@@ -1794,6 +1798,8 @@ def main() -> None:
             st.session_state["report_type"] = loaded_scope_report_type
         st.session_state["loaded_details"] = loaded_scope_details
         st.session_state["loaded_scope_key"] = scope
+        st.session_state["sticky_validation_active"] = False
+        st.session_state["sticky_validation_errors"] = []
 
     lock_now = read_lock(team_scope, str(work_date_scope))
     if lock_now:
@@ -1845,6 +1851,8 @@ def main() -> None:
                     st.session_state["report_type_confirmed"] = pending
                     st.session_state["report_type"] = pending
                     st.session_state["loaded_details"] = {}
+                    st.session_state["sticky_validation_active"] = False
+                    st.session_state["sticky_validation_errors"] = []
                     st.session_state["await_report_type_confirm"] = False
                     st.session_state["pending_report_type"] = ""
                     st.rerun()
@@ -3788,7 +3796,7 @@ def main() -> None:
         },
     )
 
-    if submitted:
+    def collect_validation_errors(prev_snapshot: Dict[str, Any]) -> List[str]:
         common_form = {"team_id": team_id, "pelapor": pelapor, "shift": shift}
         errs = validate_common(common_form)
         lock_ok, lock_err = validate_lock_for_submit(
@@ -3805,18 +3813,33 @@ def main() -> None:
         else:
             errs.extend(validate_steril(details))
 
-        prev_total = parse_optional_float(prev_state_snapshot.get("details", {}).get("total_akhir_kg")) if prev_state_snapshot else None
+        prev_total = parse_optional_float(prev_snapshot.get("details", {}).get("total_akhir_kg")) if prev_snapshot else None
         cur_total = parse_optional_float(details.get("total_akhir_kg"))
         if prev_total is not None and cur_total is not None and abs(prev_total - cur_total) > 0.001:
             if not str(details.get("total_change_reason", "")).strip():
                 errs.append("Total berubah dari laporan sebelumnya. Isi alasan perubahan.")
             if str(details.get("tl_confirm_phrase", "")).strip().upper() != "SUDAH DIKONFIRMASI TL":
                 errs.append("Total berubah. Isi konfirmasi TL persis: SUDAH DIKONFIRMASI TL")
+        return errs
 
-        if errs:
-            for e in errs:
-                st.error(e)
+    if submitted:
+        st.session_state["sticky_validation_active"] = True
+
+    validation_errors: List[str] = []
+    if st.session_state.get("sticky_validation_active", False):
+        validation_errors = collect_validation_errors(prev_state_snapshot)
+        st.session_state["sticky_validation_errors"] = validation_errors
+    else:
+        st.session_state["sticky_validation_errors"] = []
+
+    for e in st.session_state.get("sticky_validation_errors", []):
+        st.error(e)
+
+    if submitted:
+        if validation_errors:
             return
+        st.session_state["sticky_validation_active"] = False
+        st.session_state["sticky_validation_errors"] = []
 
         existing_ids = []
         if existing_message_ids_raw.strip():
