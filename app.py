@@ -314,6 +314,23 @@ def ensure_row_count_from_session(
     return final_rows
 
 
+def drop_last_row_from_session(
+    count_key: str,
+    field_prefixes: List[str],
+    min_rows: int = 1,
+) -> None:
+    current = int(st.session_state.get(count_key, min_rows))
+    if current <= min_rows:
+        st.session_state[count_key] = min_rows
+        return
+    last_idx = current - 1
+    for prefix in field_prefixes:
+        key_name = f"{prefix}{last_idx}"
+        if key_name in st.session_state:
+            st.session_state[key_name] = ""
+    st.session_state[count_key] = current - 1
+
+
 def normalize_giling_status_input(
     raw_status: str,
     next_batch: int,
@@ -1858,7 +1875,11 @@ def main() -> None:
                         st.rerun()
                 with d2:
                     if st.button("- Hapus", key="btn_del_defrost"):
-                        st.session_state["defrost_rows_non"] = max(1, int(st.session_state.get("defrost_rows_non", 1)) - 1)
+                        drop_last_row_from_session(
+                            "defrost_rows_non",
+                            ["def_jam_non_", "def_isi_non_", "def_kg_non_", "def_cat_non_"],
+                            min_rows=1,
+                        )
                         st.rerun()
                 with d3:
                     pass
@@ -2100,7 +2121,11 @@ def main() -> None:
                     st.rerun()
             with tb2:
                 if st.button("- Hapus", key="btn_del_tempat_non"):
-                    st.session_state["tempat_buang_rows_non"] = max(1, int(st.session_state.get("tempat_buang_rows_non", 1)) - 1)
+                    drop_last_row_from_session(
+                        "tempat_buang_rows_non",
+                        ["tb_jam_non_", "tb_status_non_", "tb_cat_non_"],
+                        min_rows=1,
+                    )
                     st.rerun()
             with tb3:
                 pass
@@ -2168,7 +2193,11 @@ def main() -> None:
                         st.rerun()
                 with g2:
                     if st.button("- Hapus", key="btn_del_giling"):
-                        st.session_state["giling_rows_non"] = max(1, int(st.session_state.get("giling_rows_non", 1)) - 1)
+                        drop_last_row_from_session(
+                            "giling_rows_non",
+                            ["gil_jam_non_", "gil_isi_non_", "gil_kg_non_", "gil_cat_non_"],
+                            min_rows=1,
+                        )
                         st.rerun()
                 with g3:
                     pass
@@ -2280,7 +2309,11 @@ def main() -> None:
                     st.rerun()
             with gd2:
                 if st.button("- Hapus", key="btn_del_delay_giling"):
-                    st.session_state["giling_delay_rows_non"] = max(1, int(st.session_state.get("giling_delay_rows_non", 1)) - 1)
+                    drop_last_row_from_session(
+                        "giling_delay_rows_non",
+                        ["delay_jam_non_", "delay_status_non_", "delay_detail_non_"],
+                        min_rows=1,
+                    )
                     st.rerun()
             with gd3:
                 pass
@@ -2370,7 +2403,11 @@ def main() -> None:
                         st.rerun()
                 with v2:
                     if st.button("- Hapus", key="btn_del_vacum"):
-                        st.session_state["vacum_rows_non"] = max(1, int(st.session_state.get("vacum_rows_non", 1)) - 1)
+                        drop_last_row_from_session(
+                            "vacum_rows_non",
+                            ["vac_jam_non_", "vac_isi_non_", "vac_kg_non_", "vac_cat_non_"],
+                            min_rows=1,
+                        )
                         st.rerun()
                 with v3:
                     pass
@@ -2488,7 +2525,11 @@ def main() -> None:
                     st.rerun()
             with vd2:
                 if st.button("- Hapus", key="btn_del_vac_defect"):
-                    st.session_state["vacum_defect_rows_non"] = max(1, int(st.session_state.get("vacum_defect_rows_non", 1)) - 1)
+                    drop_last_row_from_session(
+                        "vacum_defect_rows_non",
+                        ["vac_defect_type_non_", "vac_defect_jenis_non_", "vac_defect_qty_non_", "vac_defect_note_non_"],
+                        min_rows=1,
+                    )
                     st.rerun()
             with vd3:
                 pass
@@ -2603,7 +2644,19 @@ def main() -> None:
                     st.rerun()
             with vo2:
                 if st.button("- Hapus", key="btn_del_vac_ops"):
-                    st.session_state["vacum_ops_rows_non"] = max(1, int(st.session_state.get("vacum_ops_rows_non", 1)) - 1)
+                    drop_last_row_from_session(
+                        "vacum_ops_rows_non",
+                        [
+                            "vac_ops_jam_non_",
+                            "vac_ops_antrian_non_",
+                            "vac_ops_antrian_det_non_",
+                            "vac_ops_mesin_non_",
+                            "vac_ops_mesin_det_non_",
+                            "vac_ops_kirim_non_",
+                            "vac_ops_pic_non_",
+                        ],
+                        min_rows=1,
+                    )
                     st.rerun()
             with vo3:
                 pass
@@ -2758,7 +2811,18 @@ def main() -> None:
                     st.rerun()
             with h2:
                 if st.button("- Hapus", key="btn_del_handover"):
-                    st.session_state["handover_rows_non"] = max(1, int(st.session_state.get("handover_rows_non", 1)) - 1)
+                    drop_last_row_from_session(
+                        "handover_rows_non",
+                        [
+                            "handover_jam_non_",
+                            "handover_kirim_non_",
+                            "handover_terima_non_",
+                            "handover_tl_non_",
+                            "handover_pic_non_",
+                            "handover_alasan_non_",
+                        ],
+                        min_rows=1,
+                    )
                     st.rerun()
             with h3:
                 pass
@@ -2977,7 +3041,11 @@ def main() -> None:
                         st.rerun()
                 with d2:
                     if st.button("- Hapus", key="btn_del_defrost_st"):
-                        st.session_state["defrost_rows_st"] = max(1, int(st.session_state.get("defrost_rows_st", 1)) - 1)
+                        drop_last_row_from_session(
+                            "defrost_rows_st",
+                            ["def_jam_st_", "def_isi_st_", "def_kg_st_", "def_cat_st_"],
+                            min_rows=1,
+                        )
                         st.rerun()
                 with d3:
                     pass
@@ -3098,7 +3166,11 @@ def main() -> None:
                     st.rerun()
             with tb2:
                 if st.button("- Hapus", key="btn_del_tempat_st"):
-                    st.session_state["tempat_buang_rows_st"] = max(1, int(st.session_state.get("tempat_buang_rows_st", 1)) - 1)
+                    drop_last_row_from_session(
+                        "tempat_buang_rows_st",
+                        ["tb_jam_st_", "tb_status_st_", "tb_cat_st_"],
+                        min_rows=1,
+                    )
                     st.rerun()
             with tb3:
                 pass
@@ -3167,7 +3239,11 @@ def main() -> None:
                         st.rerun()
                 with g2:
                     if st.button("- Hapus", key="btn_del_giling_st"):
-                        st.session_state["giling_rows_st"] = max(1, int(st.session_state.get("giling_rows_st", 1)) - 1)
+                        drop_last_row_from_session(
+                            "giling_rows_st",
+                            ["gil_jam_st_", "gil_isi_st_", "gil_kg_st_", "gil_cat_st_"],
+                            min_rows=1,
+                        )
                         st.rerun()
                 with g3:
                     pass
@@ -3258,7 +3334,11 @@ def main() -> None:
                     st.rerun()
             with s2:
                 if st.button("- Hapus", key="btn_del_steril_row_st"):
-                    st.session_state["steril_rows_st"] = max(1, int(st.session_state.get("steril_rows_st", 1)) - 1)
+                    drop_last_row_from_session(
+                        "steril_rows_st",
+                        ["steril_no_st_", "steril_jam_st_", "steril_batch_st_", "steril_panci_st_", "steril_cat_st_"],
+                        min_rows=1,
+                    )
                     st.rerun()
             with s3:
                 pass
@@ -3330,7 +3410,11 @@ def main() -> None:
                     st.rerun()
             with tb2:
                 if st.button("- Hapus", key="btn_del_steril_total_st"):
-                    st.session_state["steril_total_rows_st"] = max(1, int(st.session_state.get("steril_total_rows_st", 1)) - 1)
+                    drop_last_row_from_session(
+                        "steril_total_rows_st",
+                        ["steril_total_no_st_", "steril_total_qty_st_", "steril_total_kg_st_"],
+                        min_rows=1,
+                    )
                     st.rerun()
             with tb3:
                 pass
@@ -3395,7 +3479,11 @@ def main() -> None:
                     st.rerun()
             with c2:
                 if st.button("- Hapus", key="btn_del_steril_check_st"):
-                    st.session_state["steril_check_rows_st"] = max(1, int(st.session_state.get("steril_check_rows_st", 1)) - 1)
+                    drop_last_row_from_session(
+                        "steril_check_rows_st",
+                        ["steril_check_no_st_", "steril_check_batch_st_", "steril_check_actual_st_"],
+                        min_rows=1,
+                    )
                     st.rerun()
             with c3:
                 pass
@@ -3416,13 +3504,17 @@ def main() -> None:
                 no = cc0.text_input("No", key=no_key, max_chars=3)
                 batch = cc1.text_input("Batch", placeholder=str(idx + 1), key=f"steril_check_batch_st_{idx}")
                 jam_target = hhmm_plus_minutes(steril_start_map.get(batch.strip(), ""), steril_target_minutes)
-                cc2.text_input("Jam target", value=jam_target, disabled=True, key=f"steril_check_target_view_st_{idx}")
+                target_view_key = f"steril_check_target_view_st_{idx}"
+                st.session_state[target_view_key] = jam_target
+                cc2.text_input("Jam target", key=target_view_key, disabled=True)
                 jam_actual = cc3.text_input("Jam aktual", placeholder="09:35", key=f"steril_check_actual_st_{idx}")
                 status_check = "-"
                 diff_min = minutes_diff_hhmm(steril_start_map.get(batch.strip(), ""), jam_actual)
                 if diff_min is not None:
                     status_check = "O" if diff_min >= steril_target_minutes else "X"
-                cc4.text_input("Status", value=status_check, disabled=True, key=f"steril_check_status_view_st_{idx}")
+                status_view_key = f"steril_check_status_view_st_{idx}"
+                st.session_state[status_view_key] = status_check
+                cc4.text_input("Status", key=status_view_key, disabled=True)
                 if batch.strip() or jam_actual.strip():
                     steril_check_rows.append(
                         {
@@ -3481,7 +3573,11 @@ def main() -> None:
                     st.rerun()
             with cb2:
                 if st.button("- Hapus", key="btn_del_cb_row_st"):
-                    st.session_state["cb_rows_st"] = max(1, int(st.session_state.get("cb_rows_st", 1)) - 1)
+                    drop_last_row_from_session(
+                        "cb_rows_st",
+                        ["cb_no_st_", "cb_jam_st_", "cb_batch_st_", "cb_panci_st_", "cb_cat_st_"],
+                        min_rows=1,
+                    )
                     st.rerun()
             with cb3:
                 pass
