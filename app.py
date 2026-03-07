@@ -475,6 +475,19 @@ def build_vacum_status_text(rows: List[Dict[str, Any]]) -> str:
     return "\n".join(lines).strip()
 
 
+def normalize_vacum_issue_status(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    no_issue_alias = {"tidak ada masalah", "tidak_ada_masalah", "no_issue", "no problem", "aman", "x"}
+    issue_alias = {"ada masalah", "ada_masalah", "problem", "masalah", "o"}
+    if raw in no_issue_alias:
+        return "Tidak ada masalah"
+    if raw in issue_alias:
+        return "Ada masalah"
+    return ""
+
+
 def informative_lines(pairs: List[Tuple[str, Any]]) -> List[str]:
     lines: List[str] = []
     for label, value in pairs:
@@ -1417,19 +1430,45 @@ def validate_non_steril(details: Dict[str, Any]) -> List[str]:
     has_defect_row = False
     if isinstance(vacum_defect_rows, list):
         for idx, row in enumerate(vacum_defect_rows, start=1):
+            status = normalize_vacum_issue_status(row.get("status", ""))
             jenis = str(row.get("jenis", "")).strip()
             jumlah_raw = str(row.get("jumlah_pack", "")).strip()
-            if not jenis and not jumlah_raw:
+            catatan = str(row.get("catatan", "")).strip()
+            jumlah_val = parse_optional_float(jumlah_raw) if jumlah_raw else None
+            if status == "Tidak ada masalah":
+                continue
+            if status == "Ada masalah":
+                has_defect_row = True
+                if not jenis or jenis == "-":
+                    errs.append(f"Barang ada masalah vacum {idx} wajib diisi.")
+                if not jumlah_raw:
+                    errs.append(f"Jumlah pack barang bermasalah vacum {idx} wajib angka.")
+                    continue
+                if jumlah_val is None:
+                    errs.append(f"Jumlah pack barang bermasalah vacum {idx} wajib angka.")
+                    continue
+                if jumlah_val <= 0:
+                    errs.append(f"Jumlah pack barang bermasalah vacum {idx} harus lebih dari 0.")
+                    continue
+                defect_sum_from_rows += jumlah_val
+                continue
+
+            # Backward compatibility for legacy rows without explicit status.
+            qty_signal = bool(jumlah_raw) and (jumlah_val is None or abs(float(jumlah_val)) > 0.001)
+            intentional_row = bool(jenis or catatan or qty_signal)
+            if not intentional_row:
                 continue
             has_defect_row = True
-            jumlah_val = parse_optional_float(jumlah_raw)
-            if not jenis:
+            if not jenis and (catatan or qty_signal):
                 errs.append(f"Barang ada masalah vacum {idx} wajib diisi.")
+            if not jumlah_raw:
+                errs.append(f"Jumlah pack barang bermasalah vacum {idx} wajib angka.")
+                continue
             if jumlah_val is None:
                 errs.append(f"Jumlah pack barang bermasalah vacum {idx} wajib angka.")
                 continue
-            if jumlah_val < 0:
-                errs.append(f"Jumlah pack barang bermasalah vacum {idx} tidak boleh negatif.")
+            if jumlah_val <= 0:
+                errs.append(f"Jumlah pack barang bermasalah vacum {idx} harus lebih dari 0.")
                 continue
             defect_sum_from_rows += jumlah_val
 
@@ -2869,125 +2908,275 @@ def main() -> None:
                 placeholder="contoh: 88",
             )
 
-            st.markdown("#### Barang ada masalah vacum/pillow")
-            loaded_vacum_defect_rows = loaded_details.get("vacum_defect_rows", [])
+            st.markdown("#### Pengecekan masalah vacum/pillow")
+            vacum_issue_seed_key = f"seed_vacum_issue_non::{team_id}::{work_date}"
+            vacum_issue_log_key = f"vacum_issue_log_non::{team_id}::{work_date}"
+            vacum_issue_form_open_key = f"vacum_issue_form_open_non::{team_id}::{work_date}"
+            vacum_issue_form_time_key = f"vacum_issue_form_time_non::{team_id}::{work_date}"
+            vacum_issue_form_type_key = f"vacum_issue_form_type_non::{team_id}::{work_date}"
+            vacum_issue_form_manual_key = f"vacum_issue_form_manual_non::{team_id}::{work_date}"
+            vacum_issue_form_qty_key = f"vacum_issue_form_qty_non::{team_id}::{work_date}"
+            vacum_issue_form_note_key = f"vacum_issue_form_note_non::{team_id}::{work_date}"
             defect_type_manual = "Lainnya (isi manual)"
             defect_type_options = ["", "Seal bocor", "Pack pecah", "Basi", "Vakum kurang rapat", defect_type_manual]
-            if isinstance(loaded_vacum_defect_rows, list) and loaded_vacum_defect_rows:
-                existing_defect_local = False
-                for i in range(20):
-                    if str(st.session_state.get(f"vac_defect_type_non_{i}", "")).strip() or str(
-                        st.session_state.get(f"vac_defect_jenis_non_{i}", "")
-                    ).strip() or str(
-                        st.session_state.get(f"vac_defect_qty_non_{i}", "")
-                    ).strip() or str(
-                        st.session_state.get(f"vac_defect_note_non_{i}", "")
-                    ).strip():
-                        existing_defect_local = True
-                        break
-                if not existing_defect_local:
-                    st.session_state["vacum_defect_rows_non"] = min(20, max(1, len(loaded_vacum_defect_rows)))
-                    for idx, row in enumerate(loaded_vacum_defect_rows[:20]):
+
+            if not st.session_state.get(vacum_issue_seed_key, False):
+                seeded_issue_rows: List[Dict[str, str]] = []
+                loaded_vacum_defect_rows = loaded_details.get("vacum_defect_rows", [])
+                if isinstance(loaded_vacum_defect_rows, list) and loaded_vacum_defect_rows:
+                    for row in loaded_vacum_defect_rows[:80]:
+                        seeded_status = normalize_vacum_issue_status(row.get("status", ""))
+                        seeded_jam = normalize_hhmm_loose(row.get("jam", ""))
                         seeded_jenis = str(row.get("jenis", "")).strip()
-                        if seeded_jenis in defect_type_options:
-                            st.session_state[f"vac_defect_type_non_{idx}"] = seeded_jenis
-                            st.session_state[f"vac_defect_jenis_non_{idx}"] = ""
-                        elif seeded_jenis:
-                            st.session_state[f"vac_defect_type_non_{idx}"] = defect_type_manual
-                            st.session_state[f"vac_defect_jenis_non_{idx}"] = seeded_jenis
-                        else:
-                            st.session_state[f"vac_defect_type_non_{idx}"] = ""
-                            st.session_state[f"vac_defect_jenis_non_{idx}"] = ""
-                        st.session_state[f"vac_defect_qty_non_{idx}"] = str(row.get("jumlah_pack", ""))
-                        st.session_state[f"vac_defect_note_non_{idx}"] = str(row.get("catatan", ""))
-            elif str(loaded_details.get("jenis_defect_vacum", "")).strip() or str(
-                loaded_details.get("total_vacum_defect_pack", "")
-            ).strip():
-                # Backward compatibility for old single text fields.
-                if not str(st.session_state.get("vac_defect_jenis_non_0", "")).strip() and not str(
-                    st.session_state.get("vac_defect_qty_non_0", "")
+                        seeded_qty_raw = str(row.get("jumlah_pack", "")).strip()
+                        seeded_catatan = str(row.get("catatan", "")).strip()
+
+                        if seeded_status == "Tidak ada masalah":
+                            seeded_issue_rows.append(
+                                {
+                                    "jam": seeded_jam,
+                                    "status": "Tidak ada masalah",
+                                    "jenis": "-",
+                                    "jumlah_pack": "0",
+                                    "catatan": "-",
+                                }
+                            )
+                            continue
+
+                        # Legacy rows (without explicit status) are treated as "Ada masalah".
+                        if seeded_status == "Ada masalah" or seeded_jenis or seeded_qty_raw or seeded_catatan:
+                            seeded_issue_rows.append(
+                                {
+                                    "jam": seeded_jam,
+                                    "status": "Ada masalah",
+                                    "jenis": seeded_jenis,
+                                    "jumlah_pack": seeded_qty_raw,
+                                    "catatan": seeded_catatan,
+                                }
+                            )
+                elif str(loaded_details.get("jenis_defect_vacum", "")).strip() or str(
+                    loaded_details.get("total_vacum_defect_pack", "")
                 ).strip():
-                    st.session_state["vacum_defect_rows_non"] = 1
-                    seeded_old = str(loaded_details.get("jenis_defect_vacum", "")).strip()
-                    st.session_state["vac_defect_type_non_0"] = defect_type_manual if seeded_old else ""
-                    st.session_state["vac_defect_jenis_non_0"] = seeded_old
-                    st.session_state["vac_defect_qty_non_0"] = str(loaded_details.get("total_vacum_defect_pack", ""))
-                    st.session_state["vac_defect_note_non_0"] = ""
+                    seeded_old_jenis = str(loaded_details.get("jenis_defect_vacum", "")).strip()
+                    seeded_old_qty = str(loaded_details.get("total_vacum_defect_pack", "")).strip()
+                    seeded_old_qty_val = parse_optional_float(seeded_old_qty)
+                    if seeded_old_jenis or (seeded_old_qty_val is not None and seeded_old_qty_val > 0):
+                        seeded_issue_rows.append(
+                            {
+                                "jam": "",
+                                "status": "Ada masalah",
+                                "jenis": seeded_old_jenis,
+                                "jumlah_pack": seeded_old_qty,
+                                "catatan": "",
+                            }
+                        )
 
-            vd1, vd2, vd3 = st.columns([2, 2, 6])
-            with vd1:
-                if st.button("+ Tambah", key="btn_add_vac_defect"):
-                    st.session_state["vacum_defect_rows_non"] = min(20, int(st.session_state.get("vacum_defect_rows_non", 1)) + 1)
-            with vd2:
-                if st.button("- Hapus", key="btn_del_vac_defect"):
-                    drop_last_row_from_session(
-                        "vacum_defect_rows_non",
-                        ["vac_defect_type_non_", "vac_defect_jenis_non_", "vac_defect_qty_non_", "vac_defect_note_non_"],
-                        min_rows=1,
+                st.session_state[vacum_issue_log_key] = seeded_issue_rows
+                st.session_state[vacum_issue_seed_key] = True
+
+            if not isinstance(st.session_state.get(vacum_issue_log_key, []), list):
+                st.session_state[vacum_issue_log_key] = []
+            if vacum_issue_form_open_key not in st.session_state:
+                st.session_state[vacum_issue_form_open_key] = False
+            if vacum_issue_form_time_key not in st.session_state:
+                st.session_state[vacum_issue_form_time_key] = ""
+            if vacum_issue_form_type_key not in st.session_state:
+                st.session_state[vacum_issue_form_type_key] = ""
+            if vacum_issue_form_manual_key not in st.session_state:
+                st.session_state[vacum_issue_form_manual_key] = ""
+            if vacum_issue_form_qty_key not in st.session_state:
+                st.session_state[vacum_issue_form_qty_key] = ""
+            if vacum_issue_form_note_key not in st.session_state:
+                st.session_state[vacum_issue_form_note_key] = ""
+
+            vact1, vact2, vact3 = st.columns([1, 1, 1])
+            with vact1:
+                if st.button("Tidak ada masalah", key="btn_vacum_issue_none_non", use_container_width=True):
+                    rows = list(st.session_state.get(vacum_issue_log_key, []))
+                    rows.append(
+                        {
+                            "jam": now_local().strftime("%H:%M"),
+                            "status": "Tidak ada masalah",
+                            "jenis": "-",
+                            "jumlah_pack": "0",
+                            "catatan": "-",
+                        }
                     )
-            with vd3:
-                pass
+                    st.session_state[vacum_issue_log_key] = rows[-80:]
+                    st.session_state[vacum_issue_form_open_key] = False
+                    st.rerun()
+            with vact2:
+                if st.button("Ada masalah", key="btn_vacum_issue_add_non", use_container_width=True):
+                    st.session_state[vacum_issue_form_open_key] = True
+                    st.session_state[vacum_issue_form_time_key] = now_local().strftime("%H:%M")
+                    st.session_state[vacum_issue_form_type_key] = ""
+                    st.session_state[vacum_issue_form_manual_key] = ""
+                    st.session_state[vacum_issue_form_qty_key] = ""
+                    st.session_state[vacum_issue_form_note_key] = ""
+                    st.rerun()
+            with vact3:
+                if st.button("Hapus terakhir", key="btn_vacum_issue_pop_non", use_container_width=True):
+                    rows = list(st.session_state.get(vacum_issue_log_key, []))
+                    if rows:
+                        rows.pop()
+                        st.session_state[vacum_issue_log_key] = rows
+                    st.rerun()
 
-            row_count_vac_defect = ensure_row_count_from_session(
-                "vacum_defect_rows_non",
-                ["vac_defect_type_non_", "vac_defect_jenis_non_", "vac_defect_qty_non_", "vac_defect_note_non_"],
-                min_rows=1,
-                max_rows=20,
-            )
+            if st.session_state.get(vacum_issue_form_open_key, False):
+                with st.container(border=True):
+                    issue_time = normalize_hhmm_loose(st.session_state.get(vacum_issue_form_time_key, "")) or now_local().strftime("%H:%M")
+                    st.caption(f"Jam otomatis: {issue_time}")
+                    f1, f2 = st.columns([3, 2])
+                    raw_type = str(st.session_state.get(vacum_issue_form_type_key, "") or "")
+                    type_idx = defect_type_options.index(raw_type) if raw_type in defect_type_options else 0
+                    jenis_type = f1.selectbox(
+                        "Jenis masalah",
+                        options=defect_type_options,
+                        index=type_idx,
+                        format_func=lambda x: "Pilih jenis masalah" if x == "" else x,
+                        key=vacum_issue_form_type_key,
+                    )
+                    jenis_manual = ""
+                    if jenis_type == defect_type_manual:
+                        jenis_manual = f1.text_input(
+                            "Jenis manual",
+                            placeholder="contoh: seal miring / kontaminasi",
+                            key=vacum_issue_form_manual_key,
+                        )
+                    jumlah_pack_issue = f2.text_input(
+                        "Jumlah (pack)",
+                        placeholder="contoh: 2",
+                        key=vacum_issue_form_qty_key,
+                    )
+                    catatan_issue = st.text_input(
+                        "Catatan (opsional)",
+                        placeholder="opsional",
+                        key=vacum_issue_form_note_key,
+                    )
+
+                    fs1, fs2 = st.columns(2)
+                    with fs1:
+                        if st.button("Simpan masalah", key="btn_vacum_issue_save_non", use_container_width=True):
+                            jenis_issue = jenis_manual.strip() if jenis_type == defect_type_manual else jenis_type.strip()
+                            jumlah_issue_val = parse_optional_float(jumlah_pack_issue)
+                            if not jenis_issue:
+                                st.error("Jenis masalah wajib diisi jika status 'Ada masalah'.")
+                            elif jumlah_issue_val is None or jumlah_issue_val <= 0:
+                                st.error("Jumlah (pack) wajib angka dan harus lebih dari 0 jika status 'Ada masalah'.")
+                            else:
+                                rows = list(st.session_state.get(vacum_issue_log_key, []))
+                                rows.append(
+                                    {
+                                        "jam": issue_time,
+                                        "status": "Ada masalah",
+                                        "jenis": jenis_issue,
+                                        "jumlah_pack": format_float_compact(jumlah_issue_val),
+                                        "catatan": catatan_issue.strip(),
+                                    }
+                                )
+                                st.session_state[vacum_issue_log_key] = rows[-80:]
+                                st.session_state[vacum_issue_form_open_key] = False
+                                st.rerun()
+                    with fs2:
+                        if st.button("Batal", key="btn_vacum_issue_cancel_non", use_container_width=True):
+                            st.session_state[vacum_issue_form_open_key] = False
+                            st.rerun()
+
+            raw_issue_rows = st.session_state.get(vacum_issue_log_key, [])
+            vacum_issue_rows: List[Dict[str, str]] = []
+            if isinstance(raw_issue_rows, list):
+                for row in raw_issue_rows:
+                    jam_row = normalize_hhmm_loose(row.get("jam", ""))
+                    status_row = normalize_vacum_issue_status(row.get("status", ""))
+                    jenis_row = str(row.get("jenis", "")).strip()
+                    qty_row = str(row.get("jumlah_pack", "")).strip()
+                    cat_row = str(row.get("catatan", "")).strip()
+                    if not status_row:
+                        if jenis_row or qty_row or cat_row:
+                            status_row = "Ada masalah"
+                        else:
+                            continue
+                    if status_row == "Tidak ada masalah":
+                        jenis_row = "-"
+                        qty_row = "0"
+                        cat_row = cat_row or "-"
+                    vacum_issue_rows.append(
+                        {
+                            "jam": jam_row,
+                            "status": status_row,
+                            "jenis": jenis_row,
+                            "jumlah_pack": qty_row,
+                            "catatan": cat_row,
+                        }
+                    )
+
+            st.caption("Log pengecekan (jam otomatis)")
+            if vacum_issue_rows:
+                st.table(
+                    [
+                        {
+                            "Jam": row.get("jam", "") or "-",
+                            "Status": row.get("status", "-"),
+                            "Jenis masalah": row.get("jenis", "-") or "-",
+                            "Jumlah": row.get("jumlah_pack", "0") or "0",
+                            "Catatan": row.get("catatan", "-") or "-",
+                        }
+                        for row in vacum_issue_rows
+                    ]
+                )
+            else:
+                st.code("- Belum ada pencatatan")
+
             vacum_defect_rows: List[Dict[str, Any]] = []
             vacum_defect_lines: List[str] = []
+            vacum_defect_summary_items: List[str] = []
             sum_vacum_defect = 0.0
-            for idx in range(int(row_count_vac_defect)):
-                vdc1, vdc2, vdc3 = st.columns([3, 2, 3])
-                raw_type = str(st.session_state.get(f"vac_defect_type_non_{idx}", "") or "")
-                type_idx = defect_type_options.index(raw_type) if raw_type in defect_type_options else 0
-                jenis_type = vdc1.selectbox(
-                    "Jenis masalah",
-                    options=defect_type_options,
-                    index=type_idx,
-                    format_func=lambda x: "Pilih barang bermasalah" if x == "" else x,
-                    key=f"vac_defect_type_non_{idx}",
+            for row in vacum_issue_rows:
+                jam_row = str(row.get("jam", "")).strip()
+                status_row = normalize_vacum_issue_status(row.get("status", ""))
+                jenis_row = str(row.get("jenis", "")).strip()
+                qty_row = str(row.get("jumlah_pack", "")).strip()
+                cat_row = str(row.get("catatan", "")).strip()
+                vacum_defect_rows.append(
+                    {
+                        "jam": jam_row,
+                        "status": status_row or str(row.get("status", "")).strip(),
+                        "jenis": jenis_row,
+                        "jumlah_pack": qty_row,
+                        "catatan": cat_row,
+                    }
                 )
-                jenis_manual = ""
-                if jenis_type == defect_type_manual:
-                    jenis_manual = vdc1.text_input(
-                        "Jenis manual",
-                        placeholder="contoh: seal miring / kontaminasi",
-                        key=f"vac_defect_jenis_non_{idx}",
-                    )
-                jumlah_pack = vdc2.text_input(
-                    "Jumlah (pack)",
-                    placeholder="contoh: 2",
-                    key=f"vac_defect_qty_non_{idx}",
-                )
-                catatan_defect = vdc3.text_input(
-                    "Catatan (opsional)",
-                    placeholder="opsional",
-                    key=f"vac_defect_note_non_{idx}",
-                )
-                jenis = jenis_manual.strip() if jenis_type == defect_type_manual else jenis_type.strip()
-                qty_val = parse_optional_float(jumlah_pack)
-                if jenis or jumlah_pack.strip() or catatan_defect.strip():
-                    vacum_defect_rows.append({"jenis": jenis, "jumlah_pack": jumlah_pack, "catatan": catatan_defect})
-                if jenis.strip() and qty_val is not None and qty_val >= 0:
-                    line = f"{jenis.strip()} {format_float_compact(qty_val)} pack"
-                    if catatan_defect.strip():
-                        line = f"{line} ({catatan_defect.strip()})"
-                    vacum_defect_lines.append(line)
-                    sum_vacum_defect += qty_val
+                if status_row != "Ada masalah":
+                    continue
+                qty_val = parse_optional_float(qty_row)
+                if qty_val is None or qty_val <= 0 or not jenis_row or jenis_row == "-":
+                    continue
+                qty_txt = format_float_compact(qty_val)
+                sum_vacum_defect += qty_val
+                summary_item = f"{jenis_row} {qty_txt} pack"
+                vacum_defect_summary_items.append(summary_item)
+                line = f"{_fmt_jam(jam_row) or '-'} | {summary_item}"
+                if cat_row and not _is_placeholder(cat_row):
+                    line += f" ({cat_row})"
+                vacum_defect_lines.append(line)
 
-            jenis_defect_vacum = ", ".join(vacum_defect_lines)
+            jenis_defect_vacum = ", ".join(vacum_defect_summary_items)
             total_vacum_defect_pack = format_float_compact(sum_vacum_defect)
             total_vacum_num = parse_optional_float(total_hasil_vakum)
             total_vacum_ok_pack = ""
             if total_vacum_num is not None:
                 total_vacum_ok_pack = format_float_compact(total_vacum_num - sum_vacum_defect)
-            st.caption("Ringkasan barang ada masalah vacum")
-            st.code("\n".join([f"- {x}" for x in vacum_defect_lines]) if vacum_defect_lines else "- Belum ada masalah tercatat")
+            st.caption("Ringkasan masalah vacum/pillow")
+            if not vacum_issue_rows:
+                st.code("- Belum ada pencatatan")
+            elif not vacum_defect_lines:
+                st.code("- Sudah dicek: tidak ada masalah")
+            else:
+                st.code("\n".join([f"- {x}" for x in vacum_defect_lines]))
             st.text_input("Total vacum bermasalah (otomatis, pack)", value=total_vacum_defect_pack, disabled=True)
             st.text_input("Total vakum normal (otomatis, pack)", value=total_vacum_ok_pack, disabled=True)
             st.caption("Rumus: total normal = total diproses - total bermasalah")
-            render_section_checkpoint_ui(team_id, str(work_date), report_type, "vacum_defect", "barang ada masalah vacum")
+            render_section_checkpoint_ui(team_id, str(work_date), report_type, "vacum_defect", "pengecekan masalah vacum/pillow")
 
             st.markdown("#### Log operasional vacum (tiap laporan)")
             st.caption("Tujuan: catat kapan mesin vacuum stop/istirahat (jam mulai + jam selesai) per laporan.")
