@@ -391,6 +391,90 @@ def normalize_giling_status_input(
     return token, next_batch, open_batch
 
 
+def collect_giling_rows_from_session(prefix: str, max_rows: int = 20, include_no: bool = False) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    next_batch = 1
+    open_batch: Optional[int] = None
+    for idx in range(max_rows):
+        jam = str(st.session_state.get(f"gil_jam_{prefix}_{idx}", "")).strip()
+        status_input = str(st.session_state.get(f"gil_isi_{prefix}_{idx}", "")).strip()
+        resep = str(st.session_state.get(f"gil_kg_{prefix}_{idx}", "")).strip()
+        catatan = str(st.session_state.get(f"gil_cat_{prefix}_{idx}", "")).strip()
+        no_val = str(st.session_state.get(f"gil_no_{prefix}_{idx}", "")).strip() if include_no else ""
+        status_text, next_batch, open_batch = normalize_giling_status_input(status_input, next_batch, open_batch)
+        if jam or status_text or resep or catatan or no_val:
+            row: Dict[str, Any] = {
+                "jam": jam,
+                "status_input": status_input,
+                "status": status_text,
+                "resep": resep,
+                "catatan": catatan,
+            }
+            if include_no:
+                row["no"] = no_val
+            rows.append(row)
+    return rows
+
+
+def build_giling_status_text(rows: List[Dict[str, Any]]) -> str:
+    lines: List[str] = []
+    for row in rows:
+        jam = str(row.get("jam", "")).strip()
+        status = str(row.get("status", "")).strip() or str(row.get("status_input", "")).strip()
+        resep = str(row.get("resep", "")).strip()
+        catatan = str(row.get("catatan", "")).strip()
+        no_val = str(row.get("no", "")).strip()
+        if jam or status or resep:
+            status_part = status
+            if resep:
+                status_part = f"{status_part} = {resep} resep".strip() if status_part else f"{resep} resep"
+            prefix = f"[{no_val}] " if no_val else ""
+            lines.append(f"- {prefix}{jam} {status_part}".strip())
+        if catatan:
+            lines.append(f"({catatan})")
+    return "\n".join(lines).strip()
+
+
+def collect_vacum_rows_from_session(max_rows: int = 20) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for idx in range(max_rows):
+        no_val = str(st.session_state.get(f"vac_no_non_{idx}", "")).strip()
+        jam = str(st.session_state.get(f"vac_jam_non_{idx}", "")).strip()
+        status = str(st.session_state.get(f"vac_isi_non_{idx}", "")).strip()
+        pack = str(st.session_state.get(f"vac_kg_non_{idx}", "")).strip()
+        catatan = str(st.session_state.get(f"vac_cat_non_{idx}", "")).strip()
+        if no_val or jam or status or pack or catatan:
+            rows.append(
+                {
+                    "no": no_val,
+                    "jam": jam,
+                    "status": status,
+                    "pack": pack,
+                    "catatan": catatan,
+                }
+            )
+    return rows
+
+
+def build_vacum_status_text(rows: List[Dict[str, Any]]) -> str:
+    lines: List[str] = []
+    for row in rows:
+        no_val = str(row.get("no", "")).strip()
+        jam = str(row.get("jam", "")).strip()
+        status = str(row.get("status", "")).strip()
+        pack = str(row.get("pack", "")).strip()
+        catatan = str(row.get("catatan", "")).strip()
+        if jam or status or pack:
+            status_part = status
+            if pack:
+                status_part = f"{status_part} = {pack}pack".strip() if status_part else f"{pack}pack"
+            prefix = f"[{no_val}] " if no_val else ""
+            lines.append(f"- {prefix}{jam} {status_part}".strip())
+        if catatan:
+            lines.append(f"({catatan})")
+    return "\n".join(lines).strip()
+
+
 def informative_lines(pairs: List[Tuple[str, Any]]) -> List[str]:
     lines: List[str] = []
     for label, value in pairs:
@@ -1581,6 +1665,31 @@ def load_work_state(team_id: str, work_date: str) -> Dict[str, Any]:
     return data.get(key, {}).get("values", {})
 
 
+def reset_work_scope(team_id: str, work_date: str) -> Dict[str, int]:
+    scope_key = f"{team_id.strip()}::{work_date}"
+    deleted_state = 0
+    state_data = load_json(STATE_FILE, {})
+    if scope_key in state_data:
+        del state_data[scope_key]
+        deleted_state = 1
+        save_json(STATE_FILE, state_data)
+
+    deleted_checkpoints = 0
+    checkpoint_data = load_json(SECTION_CHECKPOINT_FILE, {})
+    checkpoint_prefix = f"{team_id.strip()}::{work_date}::"
+    for key in list(checkpoint_data.keys()):
+        if str(key).startswith(checkpoint_prefix):
+            del checkpoint_data[key]
+            deleted_checkpoints += 1
+    if deleted_checkpoints > 0:
+        save_json(SECTION_CHECKPOINT_FILE, checkpoint_data)
+
+    return {
+        "state_deleted": deleted_state,
+        "checkpoints_deleted": deleted_checkpoints,
+    }
+
+
 def lock_scope(team_id: str, work_date: str) -> str:
     return f"{team_id.strip()}::{work_date}"
 
@@ -1773,6 +1882,9 @@ def main() -> None:
         st.session_state["sticky_validation_active"] = False
     if "sticky_validation_errors" not in st.session_state:
         st.session_state["sticky_validation_errors"] = []
+    reset_notice = str(st.session_state.pop("post_reset_notice", "")).strip()
+    if reset_notice:
+        st.success(reset_notice)
 
     with st.container(border=True):
         st.markdown("**Header**")
@@ -1880,6 +1992,47 @@ def main() -> None:
     if mins is not None and mins > 30:
         st.warning(f"Reminder: belum ada laporan sukses selama {mins} menit pada scope ini.")
 
+    with st.expander("Reset draft laporan (scope aktif)"):
+        st.caption("Menghapus draft isian + checkpoint untuk team/tanggal aktif.")
+        st.caption("Tidak menghapus pesan Telegram/append Google Sheets yang sudah terkirim.")
+        reset_phrase = st.text_input(
+            "Ketik persis RESET DRAFT untuk konfirmasi",
+            key=f"reset_phrase::{scope}",
+            placeholder="RESET DRAFT",
+        )
+        if st.button("Reset Draft Scope Ini", use_container_width=True):
+            if reset_phrase.strip().upper() != "RESET DRAFT":
+                st.error("Konfirmasi reset belum cocok. Ketik persis: RESET DRAFT")
+            else:
+                reset_stats = reset_work_scope(team_scope, str(work_date_scope))
+                preserved_report_type = st.session_state.get("report_type_confirmed", "non_steril")
+                preserved = {
+                    "team_scope": team_scope,
+                    "work_date_scope": work_date_scope,
+                    "owner_scope": operator_scope,
+                    "authenticated_scope": scope,
+                    "lock_token": st.session_state.get("lock_token", ""),
+                    "lock_version": int(st.session_state.get("lock_version", 0)),
+                    "lock_owner": st.session_state.get("lock_owner", ""),
+                    "active_idempotency_key": str(uuid.uuid4()),
+                    "report_type_confirmed": preserved_report_type,
+                    "report_type": preserved_report_type,
+                    "pending_report_type": "",
+                    "await_report_type_confirm": False,
+                    "loaded_scope_key": "",
+                    "loaded_details": {},
+                    "scope_just_loaded": False,
+                    "sticky_validation_active": False,
+                    "sticky_validation_errors": [],
+                    "post_reset_notice": (
+                        "Draft berhasil direset. "
+                        f"state={reset_stats['state_deleted']}, checkpoint={reset_stats['checkpoints_deleted']}."
+                    ),
+                }
+                st.session_state.clear()
+                st.session_state.update(preserved)
+                st.rerun()
+
     with st.container(border=True):
         st.markdown("**Jenis Laporan Giling**")
         confirmed_type = st.session_state.get("report_type_confirmed", "non_steril")
@@ -1948,11 +2101,13 @@ def main() -> None:
             jam_kerja_mulai_t = st.time_input(
                 "Jam kerja mulai",
                 value=parse_hhmm_time(loaded_details.get("jam_kerja_mulai", ""), "00:00"),
+                key=f"jam_kerja_mulai::{work_date_scope}::{team_scope}",
             )
         with jam2:
             jam_kerja_selesai_t = st.time_input(
                 "Jam kerja selesai",
                 value=parse_hhmm_time(loaded_details.get("jam_kerja_selesai", ""), "23:30"),
+                key=f"jam_kerja_selesai::{work_date_scope}::{team_scope}",
             )
         jam_kerja_mulai = f"{jam_kerja_mulai_t.hour:02d}:{jam_kerja_mulai_t.minute:02d}"
         jam_kerja_selesai = f"{jam_kerja_selesai_t.hour:02d}:{jam_kerja_selesai_t.minute:02d}"
@@ -2329,6 +2484,39 @@ def main() -> None:
             render_section_checkpoint_ui(team_id, str(work_date), report_type, "tempat_buang", "2-2 Tempat buang")
             st.markdown("### 3-1. Status Giling")
             st.caption("Isi `1` untuk mulai, `2` untuk selesai. Selain itu bisa tulis manual.")
+            seed_giling_non_key = f"seed_giling_non::{team_id}::{work_date}"
+            if not st.session_state.get(seed_giling_non_key, False):
+                loaded_giling_rows_non = loaded_details.get("giling_rows", [])
+                if isinstance(loaded_giling_rows_non, list) and loaded_giling_rows_non:
+                    existing_giling_local = False
+                    for i in range(20):
+                        if str(st.session_state.get(f"gil_jam_non_{i}", "")).strip() or str(
+                            st.session_state.get(f"gil_isi_non_{i}", "")
+                        ).strip() or str(st.session_state.get(f"gil_kg_non_{i}", "")).strip() or str(
+                            st.session_state.get(f"gil_cat_non_{i}", "")
+                        ).strip():
+                            existing_giling_local = True
+                            break
+                    if not existing_giling_local:
+                        st.session_state["giling_rows_non"] = min(20, max(1, len(loaded_giling_rows_non)))
+                        for idx, row in enumerate(loaded_giling_rows_non[:20]):
+                            st.session_state[f"gil_no_non_{idx}"] = str(row.get("no", idx + 1))
+                            st.session_state[f"gil_jam_non_{idx}"] = str(row.get("jam", ""))
+                            st.session_state[f"gil_isi_non_{idx}"] = str(row.get("status_input", row.get("status", "")))
+                            st.session_state[f"gil_kg_non_{idx}"] = str(row.get("resep", ""))
+                            st.session_state[f"gil_cat_non_{idx}"] = str(row.get("catatan", ""))
+                st.session_state[seed_giling_non_key] = True
+            session_giling_rows_non = collect_giling_rows_from_session("non", max_rows=20, include_no=True)
+            giling_rows: List[Dict[str, Any]] = (
+                loaded_details.get("giling_rows", []) if isinstance(loaded_details.get("giling_rows", []), list) else []
+            )
+            if session_giling_rows_non:
+                giling_rows = session_giling_rows_non
+            manual_status_giling_non_key = f"status_giling_manual_non::{team_id}::{work_date}"
+            if manual_status_giling_non_key not in st.session_state:
+                st.session_state[manual_status_giling_non_key] = (
+                    build_giling_status_text(session_giling_rows_non) or str(loaded_details.get("status_giling", ""))
+                )
             mode_giling = st.radio(
                 "Cara isi status giling",
                 options=["List baris", "Tulis manual"],
@@ -2360,6 +2548,7 @@ def main() -> None:
                     max_rows=20,
                 )
                 giling_lines: List[str] = []
+                giling_rows = []
                 giling_resep_sum = 0.0
                 giling_resep_invalid = 0
                 giling_next_batch = 1
@@ -2392,6 +2581,17 @@ def main() -> None:
                             giling_resep_invalid += 1
                         elif resep_val >= 0:
                             giling_resep_sum += resep_val
+                    if jam.strip() or status_text.strip() or resep.strip() or cat.strip():
+                        giling_rows.append(
+                            {
+                                "no": no_gil,
+                                "jam": jam,
+                                "status_input": isi,
+                                "status": status_text,
+                                "resep": resep,
+                                "catatan": cat,
+                            }
+                        )
                     if jam.strip() or status_text.strip() or resep.strip():
                         status_part = status_text.strip()
                         if resep.strip():
@@ -2415,9 +2615,11 @@ def main() -> None:
                 if extra_giling.strip():
                     status_giling = (status_giling + "\n" + extra_giling.strip()).strip()
             else:
+                if not str(st.session_state.get(manual_status_giling_non_key, "")).strip() and session_giling_rows_non:
+                    st.session_state[manual_status_giling_non_key] = build_giling_status_text(session_giling_rows_non)
                 status_giling = st.text_area(
                     "Status giling",
-                    value=loaded_details.get("status_giling", ""),
+                    key=manual_status_giling_non_key,
                     placeholder="- 11:30 mulai giling batch 1\n- 11:50 selesai giling batch 1",
                 )
             render_section_checkpoint_ui(team_id, str(work_date), report_type, "giling", "3-1 Giling")
@@ -2538,6 +2740,39 @@ def main() -> None:
             st.code(giling_delay_detail or "- Belum ada log delay")
             render_section_checkpoint_ui(team_id, str(work_date), report_type, "giling_delay", "log delay giling")
             st.markdown("### 3-2. Status vacum")
+            seed_vacum_non_key = f"seed_vacum_non::{team_id}::{work_date}"
+            if not st.session_state.get(seed_vacum_non_key, False):
+                loaded_vacum_rows_non = loaded_details.get("vacum_rows", [])
+                if isinstance(loaded_vacum_rows_non, list) and loaded_vacum_rows_non:
+                    existing_vacum_local = False
+                    for i in range(20):
+                        if str(st.session_state.get(f"vac_jam_non_{i}", "")).strip() or str(
+                            st.session_state.get(f"vac_isi_non_{i}", "")
+                        ).strip() or str(st.session_state.get(f"vac_kg_non_{i}", "")).strip() or str(
+                            st.session_state.get(f"vac_cat_non_{i}", "")
+                        ).strip():
+                            existing_vacum_local = True
+                            break
+                    if not existing_vacum_local:
+                        st.session_state["vacum_rows_non"] = min(20, max(1, len(loaded_vacum_rows_non)))
+                        for idx, row in enumerate(loaded_vacum_rows_non[:20]):
+                            st.session_state[f"vac_no_non_{idx}"] = str(row.get("no", idx + 1))
+                            st.session_state[f"vac_jam_non_{idx}"] = str(row.get("jam", ""))
+                            st.session_state[f"vac_isi_non_{idx}"] = str(row.get("status", ""))
+                            st.session_state[f"vac_kg_non_{idx}"] = str(row.get("pack", ""))
+                            st.session_state[f"vac_cat_non_{idx}"] = str(row.get("catatan", ""))
+                st.session_state[seed_vacum_non_key] = True
+            session_vacum_rows_non = collect_vacum_rows_from_session(max_rows=20)
+            vacum_rows: List[Dict[str, Any]] = (
+                loaded_details.get("vacum_rows", []) if isinstance(loaded_details.get("vacum_rows", []), list) else []
+            )
+            if session_vacum_rows_non:
+                vacum_rows = session_vacum_rows_non
+            manual_status_vacum_non_key = f"status_vacum_manual_non::{team_id}::{work_date}"
+            if manual_status_vacum_non_key not in st.session_state:
+                st.session_state[manual_status_vacum_non_key] = (
+                    build_vacum_status_text(session_vacum_rows_non) or str(loaded_details.get("status_vacum", ""))
+                )
             mode_vacum = st.radio(
                 "Cara isi status vacum",
                 options=["List baris", "Tulis manual"],
@@ -2567,6 +2802,7 @@ def main() -> None:
                     max_rows=20,
                 )
                 vacum_lines: List[str] = []
+                vacum_rows = []
                 vacum_pack_sum = 0.0
                 vacum_pack_invalid = 0
                 for idx in range(int(row_count_vacum)):
@@ -2585,6 +2821,16 @@ def main() -> None:
                             vacum_pack_invalid += 1
                         elif pack_val >= 0:
                             vacum_pack_sum += pack_val
+                    if jam.strip() or isi.strip() or pack.strip() or cat.strip():
+                        vacum_rows.append(
+                            {
+                                "no": no_vac,
+                                "jam": jam,
+                                "status": isi,
+                                "pack": pack,
+                                "catatan": cat,
+                            }
+                        )
                     if jam.strip() or isi.strip() or pack.strip():
                         status_part = isi.strip()
                         if pack.strip():
@@ -2608,9 +2854,11 @@ def main() -> None:
                 if extra_vacum.strip():
                     status_vacum = (status_vacum + "\n" + extra_vacum.strip()).strip()
             else:
+                if not str(st.session_state.get(manual_status_vacum_non_key, "")).strip() and session_vacum_rows_non:
+                    st.session_state[manual_status_vacum_non_key] = build_vacum_status_text(session_vacum_rows_non)
                 status_vacum = st.text_area(
                     "Status vacum",
-                    value=loaded_details.get("status_vacum", ""),
+                    key=manual_status_vacum_non_key,
                     placeholder="12:00 mulai vacum batch 1\n12:30 selesai vacum batch 1",
                 )
             render_section_checkpoint_ui(team_id, str(work_date), report_type, "vacum_status", "3-2 Vacum")
@@ -3051,6 +3299,7 @@ def main() -> None:
                 "tempat_buang_check_time": tempat_buang_check_time,
                 "tempat_buang_rows": tempat_buang_rows,
                 "status_giling": status_giling,
+                "giling_rows": giling_rows,
                 "giling_total_resep_auto": giling_total_resep_auto,
                 "giling_total_pack_auto": giling_total_resep_auto,
                 "total_giling": total_giling,
@@ -3058,6 +3307,7 @@ def main() -> None:
                 "giling_delay_detail": giling_delay_detail,
                 "giling_delay_rows": giling_delay_rows,
                 "status_vacum": status_vacum,
+                "vacum_rows": vacum_rows,
                 "vacum_total_pack_auto": vacum_total_pack_auto,
                 "total_hasil_vakum": total_hasil_vakum,
                 "total_vacum_defect_pack": total_vacum_defect_pack,
@@ -3334,6 +3584,38 @@ def main() -> None:
 
             st.markdown("### 3-1. Status Giling")
             st.caption("Isi `1` untuk mulai, `2` untuk selesai. Selain itu bisa tulis manual.")
+            seed_giling_st_key = f"seed_giling_st::{team_id}::{work_date}"
+            if not st.session_state.get(seed_giling_st_key, False):
+                loaded_giling_rows_st = loaded_details.get("giling_rows", [])
+                if isinstance(loaded_giling_rows_st, list) and loaded_giling_rows_st:
+                    existing_giling_local = False
+                    for i in range(20):
+                        if str(st.session_state.get(f"gil_jam_st_{i}", "")).strip() or str(
+                            st.session_state.get(f"gil_isi_st_{i}", "")
+                        ).strip() or str(st.session_state.get(f"gil_kg_st_{i}", "")).strip() or str(
+                            st.session_state.get(f"gil_cat_st_{i}", "")
+                        ).strip():
+                            existing_giling_local = True
+                            break
+                    if not existing_giling_local:
+                        st.session_state["giling_rows_st"] = min(20, max(1, len(loaded_giling_rows_st)))
+                        for idx, row in enumerate(loaded_giling_rows_st[:20]):
+                            st.session_state[f"gil_jam_st_{idx}"] = str(row.get("jam", ""))
+                            st.session_state[f"gil_isi_st_{idx}"] = str(row.get("status_input", row.get("status", "")))
+                            st.session_state[f"gil_kg_st_{idx}"] = str(row.get("resep", ""))
+                            st.session_state[f"gil_cat_st_{idx}"] = str(row.get("catatan", ""))
+                st.session_state[seed_giling_st_key] = True
+            session_giling_rows_st = collect_giling_rows_from_session("st", max_rows=20, include_no=False)
+            giling_rows: List[Dict[str, Any]] = (
+                loaded_details.get("giling_rows", []) if isinstance(loaded_details.get("giling_rows", []), list) else []
+            )
+            if session_giling_rows_st:
+                giling_rows = session_giling_rows_st
+            manual_status_giling_st_key = f"status_giling_manual_st::{team_id}::{work_date}"
+            if manual_status_giling_st_key not in st.session_state:
+                st.session_state[manual_status_giling_st_key] = (
+                    build_giling_status_text(session_giling_rows_st) or str(loaded_details.get("status_giling", ""))
+                )
             mode_giling_st = st.radio(
                 "Cara isi status giling",
                 options=["List baris", "Tulis manual"],
@@ -3365,6 +3647,7 @@ def main() -> None:
                     max_rows=20,
                 )
                 giling_lines_st: List[str] = []
+                giling_rows = []
                 giling_resep_sum = 0.0
                 giling_resep_invalid = 0
                 giling_next_batch_st = 1
@@ -3389,6 +3672,17 @@ def main() -> None:
                             giling_resep_invalid += 1
                         elif resep_val >= 0:
                             giling_resep_sum += resep_val
+                    if jam.strip() or status_text.strip() or resep.strip() or cat.strip():
+                        giling_rows.append(
+                            {
+                                "no": idx + 1,
+                                "jam": jam,
+                                "status_input": isi,
+                                "status": status_text,
+                                "resep": resep,
+                                "catatan": cat,
+                            }
+                        )
                     if jam.strip() or status_text.strip() or resep.strip():
                         status_part = status_text.strip()
                         if resep.strip():
@@ -3407,9 +3701,11 @@ def main() -> None:
                 if extra_giling_st.strip():
                     status_giling = (status_giling + "\n" + extra_giling_st.strip()).strip()
             else:
+                if not str(st.session_state.get(manual_status_giling_st_key, "")).strip() and session_giling_rows_st:
+                    st.session_state[manual_status_giling_st_key] = build_giling_status_text(session_giling_rows_st)
                 status_giling = st.text_area(
                     "Status giling",
-                    value=loaded_details.get("status_giling", ""),
+                    key=manual_status_giling_st_key,
                     placeholder="- 20:30 mulai giling batch 1\n- 21:35 giling batch 3",
                 )
             render_section_checkpoint_ui(team_id, str(work_date), report_type, "giling", "3-1 Giling")
@@ -3759,6 +4055,7 @@ def main() -> None:
                 "tempat_buang_check_time": tempat_buang_check_time,
                 "tempat_buang_rows": tempat_buang_rows,
                 "status_giling": status_giling,
+                "giling_rows": giling_rows,
                 "giling_total_resep_auto": giling_total_resep_auto,
                 "giling_total_pack_auto": giling_total_resep_auto,
                 "total_giling": total_giling,
@@ -3916,8 +4213,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
