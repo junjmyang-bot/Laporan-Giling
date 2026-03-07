@@ -1924,6 +1924,9 @@ def main() -> None:
     reset_notice = str(st.session_state.pop("post_reset_notice", "")).strip()
     if reset_notice:
         st.success(reset_notice)
+    scope_guard_notice = str(st.session_state.pop("scope_guard_notice", "")).strip()
+    if scope_guard_notice:
+        st.warning(scope_guard_notice)
 
     with st.container(border=True):
         st.markdown("**Header**")
@@ -1958,7 +1961,7 @@ def main() -> None:
         st.caption("Buka Tim: mulai laporan tim ini hari ini (PIN + kunci).")
         st.caption("Ambil Alih Tim: ambil alih saat tim terkunci operator lain.")
 
-        b1, b2 = st.columns(2)
+        b1, b2, b3 = st.columns(3)
         with b1:
             if st.button("Open Team", use_container_width=True):
                 if not operator_scope.strip():
@@ -1991,6 +1994,38 @@ def main() -> None:
                         st.error(msg)
                 else:
                     st.error("PIN Tim tidak valid untuk ambil alih.")
+        with b3:
+            if st.button("Ganti Scope", use_container_width=True):
+                st.session_state["authenticated_scope"] = ""
+                st.session_state["loaded_scope_key"] = ""
+                st.session_state["loaded_details"] = {}
+                st.session_state["lock_token"] = ""
+                st.session_state["lock_version"] = 0
+                st.session_state["lock_owner"] = ""
+                st.session_state["scope_guard_notice"] = "Scope aktif dilepas. Pilih team/tanggal baru lalu buka tim."
+                st.rerun()
+
+    active_scope = str(st.session_state.get("authenticated_scope", "")).strip()
+    if active_scope and active_scope != scope:
+        active_parts = active_scope.split("::", 1)
+        if len(active_parts) == 2:
+            active_date_raw, active_team = active_parts
+            active_date = work_date_scope
+            try:
+                active_date = datetime.strptime(active_date_raw, "%Y-%m-%d").date()
+            except Exception:
+                pass
+            if active_team in TEAM_PASSWORDS:
+                st.session_state["team_scope"] = active_team
+                st.session_state["work_date_scope"] = active_date
+                st.session_state["scope_guard_notice"] = (
+                    "Scope aktif dipertahankan agar input tidak kembali ke menu awal. "
+                    "Gunakan 'Ganti Scope' jika ingin pindah team/tanggal."
+                )
+                st.rerun()
+        # Fallback if active scope is malformed.
+        st.session_state["authenticated_scope"] = ""
+
     if st.session_state.get("authenticated_scope") != scope:
         st.warning("Masukkan PIN lalu tekan 'Buka Tim' untuk mulai isi laporan.")
         st.stop()
